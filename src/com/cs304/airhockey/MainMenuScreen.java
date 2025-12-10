@@ -3,53 +3,54 @@ package com.cs304.airhockey;
 import com.jogamp.opengl.util.awt.TextRenderer;
 
 /**
- * Main menu screen.
- *
- * When a game is currently running (hasActiveGame = true),
- * the menu shows:
- *   Continue
- *   End Game
- *   Instructions
- *   High Scores
- *   Quit
- *
- * Otherwise:
- *   Start Game
- *   Instructions
- *   High Scores
- *   Quit
+ * Simple main menu screen for the Air Hockey game.
+ * Can show either "Start Game" or "Continue" depending on whether
+ * a match is already in progress.
  */
 public class MainMenuScreen {
 
-    private boolean hasActiveGame = false;
-    private int selected = 0;
+    private static class Item {
+        String label;
+        String action;
 
-    public void open(boolean hasActiveGame) {
-        this.hasActiveGame = hasActiveGame;
-        this.selected = 0;
-    }
-
-    private String[] getItems() {
-        if (hasActiveGame) {
-            return new String[] {
-                    "Continue",
-                    "End Game",
-                    "Instructions",
-                    "High Scores",
-                    "Quit"
-            };
-        } else {
-            return new String[] {
-                    "Start Game",
-                    "Instructions",
-                    "High Scores",
-                    "Quit"
-            };
+        Item(String label, String action) {
+            this.label = label;
+            this.action = action;
         }
     }
 
+    private Item[] items;
+    private int selected = 0;
+
+    public MainMenuScreen() {
+        open(false);
+    }
+
+    /**
+     * Configure the menu for either "no active game" or "game in progress".
+     */
+    public void open(boolean canContinue) {
+        if (canContinue) {
+            items = new Item[] {
+                    new Item("Continue", "continue"),
+                    new Item("Start New Game", "start"),
+                    new Item("End Current Game", "endgame"),
+                    new Item("Instructions", "instructions"),
+                    new Item("High Scores", "highscores"),
+                    new Item("Quit", "quit")
+            };
+        } else {
+            items = new Item[] {
+                    new Item("Start Game", "start"),
+                    new Item("Instructions", "instructions"),
+                    new Item("High Scores", "highscores"),
+                    new Item("Quit", "quit")
+            };
+        }
+        selected = 0;
+    }
+
     public void moveUp() {
-        String[] items = getItems();
         selected--;
         if (selected < 0) {
             selected = items.length - 1;
@@ -57,36 +58,18 @@ public class MainMenuScreen {
     }
 
     public void moveDown() {
-        String[] items = getItems();
         selected++;
         if (selected >= items.length) {
             selected = 0;
         }
     }
 
-    /**
-     * Returns a logical action string, not the label:
-     *   "start", "continue", "endgame", "instructions", "highscores", "quit"
-     */
     public String getSelectedAction() {
-        String[] items = getItems();
-        if (selected < 0) selected = 0;
-        if (selected >= items.length) selected = items.length - 1;
-
-        String label = items[selected];
-
-        if ("Start Game".equals(label)) return "start";
-        if ("Continue".equals(label)) return "continue";
-        if ("End Game".equals(label)) return "endgame";
-        if ("Instructions".equals(label)) return "instructions";
-        if ("High Scores".equals(label)) return "highscores";
-        if ("Quit".equals(label)) return "quit";
-
-        return "start";
+        if (items == null || items.length == 0) return "start";
+        return items[selected].action;
     }
 
     public void draw(TextRenderer r, int w, int h) {
-        String[] items = getItems();
         int centerX = w / 2;
         int baseY = h / 2 + 40;
 
@@ -99,11 +82,10 @@ public class MainMenuScreen {
             } else {
                 r.setColor(0.7f, 0.7f, 0.7f, 1f);
             }
-            r.draw(items[i], centerX - 70, baseY - i * 30);
+            r.draw(items[i].label, centerX - 80, baseY - i * 30);
         }
 
         r.setColor(0.6f, 0.6f, 0.6f, 1f);
-        r.draw("Use UP / DOWN to navigate, ENTER to select, ESC to quit/close",
-                40, 40);
+        r.draw("Use UP / DOWN to navigate, ENTER to select, ESC to quit", 40, 40);
     }
 }

@@ -3,7 +3,7 @@ package com.cs304.airhockey;
 import com.jogamp.opengl.util.awt.TextRenderer;
 
 /**
- * Instructions / help screen.
+ * Shows controls / instructions for the game.
  */
 public class InstructionsScreen {
 
@@ -12,38 +12,30 @@ public class InstructionsScreen {
         int y = h - 80;
 
         r.setColor(1f, 1f, 1f, 1f);
-        r.draw("How to Play Air Hockey", x, y);
-
+        r.draw("Instructions", w / 2 - 70, y);
         y -= 40;
-        r.setColor(0.8f, 0.8f, 0.8f, 1f);
-        r.draw("Goal:", x, y);
-        y -= 25;
-        r.draw("- Score 5 points to win the match.", x + 20, y);
-        y -= 35;
 
-        r.draw("Controls:", x, y);
-        y -= 25;
-        r.draw("- Left player  : W = up,  S = down", x + 20, y);
-        y -= 20;
-        r.draw("- Right player : UP arrow = up,  DOWN arrow = down", x + 20, y);
-        y -= 20;
-        r.draw("- P or SPACE   : Pause / resume game", x + 20, y);
-        y -= 20;
-        r.draw("- ESC          : Open / close main menu", x + 20, y);
-        y -= 35;
+        r.setColor(0.9f, 0.9f, 0.9f, 1f);
+        r.draw("Goal: Hit the puck into your opponent's goal.", x, y); y -= 30;
 
-        r.draw("Menu:", x, y);
-        y -= 25;
-        r.draw("- Start Game / Continue : play or resume a match.", x + 20, y);
-        y -= 20;
-        r.draw("- End Game              : cancel the current match.", x + 20, y);
-        y -= 20;
-        r.draw("- High Scores           : shows best winners.", x + 20, y);
-        y -= 20;
-        r.draw("- Quit                  : exit the game.", x + 20, y);
+        r.setColor(1f, 1f, 0.5f, 1f);
+        r.draw("Controls", x, y); y -= 30;
 
-        y -= 40;
-        r.setColor(0.6f, 0.6f, 0.6f, 1f);
-        r.draw("Press ENTER or ESC to return to the main menu.", x, y);
+        r.setColor(0.9f, 0.9f, 0.9f, 1f);
+        r.draw("Left player  : W / S", x, y); y -= 25;
+        r.draw("Right player : Up / Down arrows", x, y); y -= 25;
+        r.draw("Pause / Play : P or SPACE", x, y); y -= 25;
+        r.draw("Open menu    : ESC (also pauses game)", x, y); y -= 40;
+
+        r.setColor(1f, 1f, 0.5f, 1f);
+        r.draw("Menu", x, y); y -= 30;
+
+        r.setColor(0.9f, 0.9f, 0.9f, 1f);
+        r.draw("UP / DOWN    : Move selection", x, y); y -= 25;
+        r.draw("ENTER        : Activate option", x, y); y -= 25;
+        r.draw("ESC          : Quit or close menu", x, y); y -= 40;
+
+        r.setColor(0.7f, 0.7f, 0.7f, 1f);
+        r.draw("Press ENTER or ESC to return to the main menu.", x, 60);
     }
 }
