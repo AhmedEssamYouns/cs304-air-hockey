@@ -85,6 +85,7 @@ public class AirHockeyGame extends JFrame
         mainMenu.open(false);
         canvas.requestFocusInWindow();
 
+        // Start background music on app launch
         SoundManager.getInstance().playGameMusicLoop();
     }
 
@@ -102,7 +103,8 @@ public class AirHockeyGame extends JFrame
         gl.glMatrixMode(GL2.GL_MODELVIEW);
         gl.glLoadIdentity();
 
-        textRenderer = new TextRenderer(new Font("SansSerif", Font.BOLD, 18), true, true);
+        // 🔠 Bigger, nicer UI font
+        textRenderer = new TextRenderer(new Font("SansSerif", Font.BOLD, 24), true, true);
     }
 
     @Override
@@ -113,6 +115,7 @@ public class AirHockeyGame extends JFrame
 
         switch (currentScreen) {
             case MAIN_MENU:
+                drawMenuBackground(gl);
                 if (textRenderer == null) return;
                 textRenderer.beginRendering(windowWidth, windowHeight);
                 mainMenu.draw(textRenderer, windowWidth, windowHeight);
@@ -120,6 +123,7 @@ public class AirHockeyGame extends JFrame
                 break;
 
             case PLAYER_SETUP:
+                drawGenericSoftBackground(gl);
                 if (textRenderer == null) return;
                 textRenderer.beginRendering(windowWidth, windowHeight);
                 playerSetup.draw(textRenderer, windowWidth, windowHeight);
@@ -137,6 +141,7 @@ public class AirHockeyGame extends JFrame
                 break;
 
             case HIGH_SCORES:
+                drawHighScoresBackground(gl);
                 if (textRenderer == null) return;
                 textRenderer.beginRendering(windowWidth, windowHeight);
                 highScores.draw(textRenderer, windowWidth, windowHeight);
@@ -144,6 +149,7 @@ public class AirHockeyGame extends JFrame
                 break;
 
             case INSTRUCTIONS:
+                drawInstructionsBackground(gl);
                 if (textRenderer == null) return;
                 textRenderer.beginRendering(windowWidth, windowHeight);
                 instructions.draw(textRenderer, windowWidth, windowHeight);
@@ -151,6 +157,7 @@ public class AirHockeyGame extends JFrame
                 break;
 
             case SETTINGS:
+                drawSettingsBackground(gl);
                 if (textRenderer == null) return;
                 textRenderer.beginRendering(windowWidth, windowHeight);
                 settings.draw(textRenderer, windowWidth, windowHeight);
@@ -227,9 +234,12 @@ public class AirHockeyGame extends JFrame
     private void handleMenuKeys(int code) {
         if (code == KeyEvent.VK_UP) {
             mainMenu.moveUp();
+            SoundManager.getInstance().playClick();
         } else if (code == KeyEvent.VK_DOWN) {
             mainMenu.moveDown();
+            SoundManager.getInstance().playClick();
         } else if (code == KeyEvent.VK_ENTER) {
+            SoundManager.getInstance().playClick();
             String action = mainMenu.getSelectedAction();
             switch (action) {
                 case "start":
@@ -298,18 +308,17 @@ public class AirHockeyGame extends JFrame
 
     private void handleSettingsKeys(int code) {
         if (code == KeyEvent.VK_ENTER || code == KeyEvent.VK_SPACE) {
+            SoundManager.getInstance().playClick();
             boolean enabled = SoundManager.getInstance().toggleSoundEnabled();
             if (enabled) {
-                // 🔊 Re-start music regardless of gameInProgress
+                // Re-start music regardless of gameInProgress
                 SoundManager.getInstance().playGameMusicLoop();
             }
-            // if disabled, SoundManager.setSoundEnabled(false) already stops it
         } else if (code == KeyEvent.VK_ESCAPE) {
             currentScreen = Screen.MAIN_MENU;
             mainMenu.open(gameWorld.isGameInProgress());
         }
     }
-
 
     @Override
     public void keyReleased(KeyEvent e) {
@@ -323,5 +332,58 @@ public class AirHockeyGame extends JFrame
         if (currentScreen == Screen.PLAYER_SETUP) {
             playerSetup.handleKeyTyped(e.getKeyChar());
         }
+    }
+
+    // ==================== Background helpers ====================
+
+    private void drawMenuBackground(GL2 gl) {
+        drawVerticalGradient(gl,
+                0.05f, 0.08f, 0.20f,  // top: deep blue
+                0.02f, 0.02f, 0.05f   // bottom: almost black
+        );
+    }
+
+    private void drawSettingsBackground(GL2 gl) {
+        drawVerticalGradient(gl,
+                0.10f, 0.05f, 0.20f,  // top: purple
+                0.02f, 0.03f, 0.08f   // bottom: dark indigo
+        );
+    }
+
+    private void drawInstructionsBackground(GL2 gl) {
+        drawVerticalGradient(gl,
+                0.18f, 0.10f, 0.05f,  // top: warm orange/brown
+                0.05f, 0.02f, 0.02f   // bottom: dark warm
+        );
+    }
+
+    private void drawHighScoresBackground(GL2 gl) {
+        drawVerticalGradient(gl,
+                0.08f, 0.10f, 0.16f,
+                0.01f, 0.02f, 0.04f
+        );
+    }
+
+    private void drawGenericSoftBackground(GL2 gl) {
+        drawVerticalGradient(gl,
+                0.06f, 0.08f, 0.16f,
+                0.01f, 0.02f, 0.05f
+        );
+    }
+
+    private void drawVerticalGradient(GL2 gl,
+                                      float rTop, float gTop, float bTop,
+                                      float rBottom, float gBottom, float bBottom) {
+        gl.glBegin(GL2.GL_QUADS);
+
+        gl.glColor3f(rTop, gTop, bTop);
+        gl.glVertex2d(-380, 240);
+        gl.glVertex2d(380, 240);
+
+        gl.glColor3f(rBottom, gBottom, bBottom);
+        gl.glVertex2d(380, -240);
+        gl.glVertex2d(-380, -240);
+
+        gl.glEnd();
     }
 }

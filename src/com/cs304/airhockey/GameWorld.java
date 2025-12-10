@@ -84,7 +84,8 @@ public class GameWorld {
 
         resetPuck(Math.random() < 0.5 ? -1 : 1);
 
-        // 🔊 start music when game starts
+        // background music already started from main window,
+        // but it's safe to call again (it checks if already running).
         SoundManager.getInstance().playGameMusicLoop();
     }
 
@@ -104,7 +105,6 @@ public class GameWorld {
         puckVX = 6;
         puckVY = 4;
 
-        // stop music
         SoundManager.getInstance().stopGameMusic();
     }
 
@@ -225,6 +225,7 @@ public class GameWorld {
         double rpTop = rightPaddleY + paddleHalfH;
         double rpBottom = rightPaddleY - paddleHalfH;
 
+        // left paddle
         if (puckX - puckR < lpRight && puckX + puckR > lpLeft &&
                 puckY + puckR > lpBottom && puckY - puckR < lpTop &&
                 puckVX < 0) {
@@ -234,8 +235,12 @@ public class GameWorld {
 
             double offset = puckY - leftPaddleY;
             puckVY += offset * 0.1;
+
+            // 🔊 play hit sound
+            SoundManager.getInstance().playHit();
         }
 
+        // right paddle
         if (puckX + puckR > rpLeft && puckX - puckR < rpRight &&
                 puckY + puckR > rpBottom && puckY - puckR < rpTop &&
                 puckVX > 0) {
@@ -245,6 +250,9 @@ public class GameWorld {
 
             double offset = puckY - rightPaddleY;
             puckVY += offset * 0.1;
+
+            // 🔊 play hit sound
+            SoundManager.getInstance().playHit();
         }
     }
 
@@ -259,7 +267,6 @@ public class GameWorld {
             paused = true;
             matchFinished = true;
 
-            // stop music when match ends
             SoundManager.getInstance().stopGameMusic();
         }
     }

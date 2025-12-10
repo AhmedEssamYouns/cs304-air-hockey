@@ -6,8 +6,12 @@ import javax.sound.sampled.Clip;
 import java.net.URL;
 
 /**
- * Simple singleton sound manager for background music.
- * Uses /sounds/game_music.wav from the classpath.
+ * Simple singleton sound manager for background music + SFX.
+ *
+ * Expects these files on the classpath (resources root):
+ *   /sounds/game_music.wav
+ *   /sounds/hit.wav
+ *   /sounds/onclick.wav
  */
 public class SoundManager {
 
@@ -18,34 +22,51 @@ public class SoundManager {
     }
 
     private boolean soundEnabled = true;
+
+    // Background music: just one looped clip
     private Clip gameMusicClip;
 
+    // SFX pools so multiple sounds can overlap
+    private static final int POOL_SIZE = 5;
+    private Clip[] hitPool;
+    private Clip[] clickPool;
+
     private SoundManager() {
-        loadGameMusic();
-    }
+        // Load music (single clip)
+        gameMusicClip = loadClip("/sounds/game_music.wav");
 
-    private void loadGameMusic() {
-        try {
-            // sound file must be at: resources/sounds/game_music.wav
-            URL url = SoundManager.class.getResource("/sounds/game_music.wav");
-            if (url == null) {
-                System.err.println("❌ Sound file NOT FOUND: /sounds/game_music.wav");
-                return;
-            }
+        // Load SFX into small pools so they can overlap
+        hitPool = new Clip[POOL_SIZE];
+        clickPool = new Clip[POOL_SIZE];
 
-            System.out.println("✅ Loading sound from: " + url);
-
-            AudioInputStream audioIn = AudioSystem.getAudioInputStream(url);
-            gameMusicClip = AudioSystem.getClip();
-            gameMusicClip.open(audioIn);
-
-            System.out.println("✅ Sound loaded OK");
-        } catch (Exception ex) {
-            System.err.println("❌ Failed to load game music:");
-            ex.printStackTrace();
-            gameMusicClip = null;
+        for (int i = 0; i < POOL_SIZE; i++) {
+            hitPool[i] = loadClip("/sounds/hit.wav");
+            clickPool[i] = loadClip("/sounds/onclick.wav");
         }
     }
+
+    // ---------- Loading helper ----------
+
+    private Clip loadClip(String resourcePath) {
+        try {
+            URL url = SoundManager.class.getResource(resourcePath);
+            if (url == null) {
+                System.err.println("❌ Sound not found on classpath: " + resourcePath);
+                return null;
+            }
+            System.out.println("✅ Loading sound from: " + url);
+            AudioInputStream audioIn = AudioSystem.getAudioInputStream(url);
+            Clip clip = AudioSystem.getClip();
+            clip.open(audioIn);
+            return clip;
+        } catch (Exception ex) {
+            System.err.println("❌ Failed to load sound: " + resourcePath);
+            ex.printStackTrace();
+            return null;
+        }
+    }
+
+    // ---------- Global enable/disable ----------
 
     public boolean isSoundEnabled() {
         return soundEnabled;
@@ -58,38 +79,61 @@ public class SoundManager {
         }
     }
 
-    /**
-     * Toggle and return the new value.
-     */
+    /** Toggle and return the new value. */
     public boolean toggleSoundEnabled() {
         setSoundEnabled(!soundEnabled);
         return soundEnabled;
     }
 
+    // ---------- Music (single loop, no overlap needed) ----------
+
     public void playGameMusicLoop() {
-        if (!soundEnabled) {
-            System.out.println("🔇 Sound disabled, not playing music.");
-            return;
-        }
-        if (gameMusicClip == null) {
-            System.out.println("⚠️ No music clip loaded, cannot play.");
-            return;
-        }
+        if (!soundEnabled || gameMusicClip == null) return;
 
         if (gameMusicClip.isRunning()) {
-            // already playing
-            return;
+            return; // already playing
         }
-
         gameMusicClip.setFramePosition(0);
         gameMusicClip.loop(Clip.LOOP_CONTINUOUSLY);
-        System.out.println("🎵 Game music started.");
     }
 
     public void stopGameMusic() {
         if (gameMusicClip != null && gameMusicClip.isRunning()) {
             gameMusicClip.stop();
-            System.out.println("⏹ Game music stopped.");
         }
+    }
+
+    // ---------- SFX with overlap support ----------
+
+    private void playFromPool(Clip[] pool) {
+        if (!soundEnabled || pool == null) return;
+
+        // 1) Try to find a free clip
+        for (Clip clip : pool) {
+            if (clip == null) continue;
+            if (!clip.isRunning()) {
+                clip.setFramePosition(0);
+                clip.start();
+                return;
+            }
+        }
+
+        // 2) All clips are busy -> just restart the first one
+        Clip first = pool[0];
+        if (first != null) {
+            first.stop();
+            first.setFramePosition(0);
+            first.start();
+        }
+    }
+
+    /** Called when puck hits a paddle – can overlap if hit happens fast. */
+    public void playHit() {
+        playFromPool(hitPool);
+    }
+
+    /** Called when menu items / options are selected or moved. */
+    public void playClick() {
+        playFromPool(clickPool);
     }
 }
