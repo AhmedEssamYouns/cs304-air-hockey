@@ -3,9 +3,8 @@ package com.cs304.airhockey;
 import com.jogamp.opengl.util.awt.TextRenderer;
 
 /**
- * Simple main menu screen for the Air Hockey game.
- * Can show either "Start Game" or "Continue" depending on whether
- * a match is already in progress.
+ * Main menu screen for the Air Hockey game.
+ * Shows different items depending on whether a game is in progress.
  */
 public class MainMenuScreen {
 
@@ -35,6 +34,7 @@ public class MainMenuScreen {
                     new Item("Continue", "continue"),
                     new Item("Start New Game", "start"),
                     new Item("End Current Game", "endgame"),
+                    new Item("Settings", "settings"),
                     new Item("Instructions", "instructions"),
                     new Item("High Scores", "highscores"),
                     new Item("Quit", "quit")
@@ -42,6 +42,7 @@ public class MainMenuScreen {
         } else {
             items = new Item[] {
                     new Item("Start Game", "start"),
+                    new Item("Settings", "settings"),
                     new Item("Instructions", "instructions"),
                     new Item("High Scores", "highscores"),
                     new Item("Quit", "quit")
@@ -71,7 +72,7 @@ public class MainMenuScreen {
 
     public void draw(TextRenderer r, int w, int h) {
         int centerX = w / 2;
-        int baseY = h / 2 + 40;
+        int baseY = h / 2 + 60;
 
         r.setColor(1f, 1f, 1f, 1f);
         r.draw("CS304 Air Hockey", centerX - 120, h - 80);
@@ -82,7 +83,7 @@ public class MainMenuScreen {
             } else {
                 r.setColor(0.7f, 0.7f, 0.7f, 1f);
             }
-            r.draw(items[i].label, centerX - 80, baseY - i * 30);
+            r.draw(items[i].label, centerX - 100, baseY - i * 30);
         }
 
         r.setColor(0.6f, 0.6f, 0.6f, 1f);

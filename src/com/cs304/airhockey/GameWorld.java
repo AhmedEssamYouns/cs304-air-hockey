@@ -7,7 +7,6 @@ import com.jogamp.opengl.util.awt.TextRenderer;
 
 /**
  * Handles all in-game logic (puck, paddles, scores) and drawing.
- * This keeps AirHockeyGame smaller and easier to read.
  */
 public class GameWorld {
 
@@ -27,7 +26,6 @@ public class GameWorld {
     private double rightPaddleX = 320;
     private double rightPaddleY = 0;
 
-    // smaller speed + per-frame update  => smoother movement
     private double paddleSpeed = 6;
 
     // key state for smooth controls
@@ -51,11 +49,9 @@ public class GameWorld {
     private boolean paused = false;
     private boolean gameInProgress = false;
 
-    // ----- Player names -----
     private String leftPlayerName = "Left Player";
     private String rightPlayerName = "Right Player";
 
-    // Has the current match finished (to switch to HighScores screen)?
     private boolean matchFinished = false;
 
     private final HighScoresScreen highScores;
@@ -64,7 +60,7 @@ public class GameWorld {
         this.highScores = highScores;
     }
 
-    // ==================== Public API for AirHockeyGame ====================
+    // ==================== Public API ====================
 
     public void startNewMatch(String leftName, String rightName) {
         this.leftPlayerName = (leftName == null || leftName.trim().isEmpty())
@@ -81,14 +77,15 @@ public class GameWorld {
         gameInProgress = true;
         matchFinished = false;
 
-        // center paddles
         leftPaddleY = 0;
         rightPaddleY = 0;
 
-        // reset key state
         wPressed = sPressed = upPressed = downPressed = false;
 
         resetPuck(Math.random() < 0.5 ? -1 : 1);
+
+        // 🔊 start music when game starts
+        SoundManager.getInstance().playGameMusicLoop();
     }
 
     public void endCurrentGame() {
@@ -106,6 +103,9 @@ public class GameWorld {
         puckY = 0;
         puckVX = 6;
         puckVY = 4;
+
+        // stop music
+        SoundManager.getInstance().stopGameMusic();
     }
 
     public boolean isGameInProgress() {
@@ -148,21 +148,12 @@ public class GameWorld {
         }
     }
 
-    /**
-     * Called every frame while the GAME screen is active.
-     */
     public void update() {
-        if (!gameInProgress || paused) {
-            return;
-        }
-
+        if (!gameInProgress || paused) return;
         updatePaddles();
         updatePuck();
     }
 
-    /**
-     * Draws the rink, paddles, puck and HUD.
-     */
     public void draw(GL2 gl, TextRenderer textRenderer, int windowWidth, int windowHeight) {
         drawRink(gl);
         drawPaddles(gl);
@@ -170,9 +161,6 @@ public class GameWorld {
         drawGameHUD(textRenderer, windowWidth, windowHeight);
     }
 
-    /**
-     * Returns true once when a match has finished, then resets the flag.
-     */
     public boolean consumeMatchFinished() {
         if (matchFinished) {
             matchFinished = false;
@@ -181,35 +169,22 @@ public class GameWorld {
         return false;
     }
 
-    // ==================== Internal update logic ====================
+    // ==================== Internal logic ====================
 
     private void updatePaddles() {
-        if (wPressed) {
-            leftPaddleY += paddleSpeed;
-        }
-        if (sPressed) {
-            leftPaddleY -= paddleSpeed;
-        }
-        if (upPressed) {
-            rightPaddleY += paddleSpeed;
-        }
-        if (downPressed) {
-            rightPaddleY -= paddleSpeed;
-        }
+        if (wPressed) leftPaddleY += paddleSpeed;
+        if (sPressed) leftPaddleY -= paddleSpeed;
+        if (upPressed) rightPaddleY += paddleSpeed;
+        if (downPressed) rightPaddleY -= paddleSpeed;
 
-        leftPaddleY = clamp(leftPaddleY,
-                WORLD_BOTTOM + paddleHalfH,
-                WORLD_TOP - paddleHalfH);
-        rightPaddleY = clamp(rightPaddleY,
-                WORLD_BOTTOM + paddleHalfH,
-                WORLD_TOP - paddleHalfH);
+        leftPaddleY = clamp(leftPaddleY, WORLD_BOTTOM + paddleHalfH, WORLD_TOP - paddleHalfH);
+        rightPaddleY = clamp(rightPaddleY, WORLD_BOTTOM + paddleHalfH, WORLD_TOP - paddleHalfH);
     }
 
     private void updatePuck() {
         puckX += puckVX;
         puckY += puckVY;
 
-        // top / bottom wall collisions
         if (puckY + puckR > WORLD_TOP) {
             puckY = WORLD_TOP - puckR;
             puckVY = -puckVY;
@@ -218,10 +193,8 @@ public class GameWorld {
             puckVY = -puckVY;
         }
 
-        // paddle collisions
         checkPaddleCollision();
 
-        // goals
         if (puckX - puckR < WORLD_LEFT) {
             rightScore++;
             resetPuck(-1);
@@ -252,7 +225,6 @@ public class GameWorld {
         double rpTop = rightPaddleY + paddleHalfH;
         double rpBottom = rightPaddleY - paddleHalfH;
 
-        // left paddle
         if (puckX - puckR < lpRight && puckX + puckR > lpLeft &&
                 puckY + puckR > lpBottom && puckY - puckR < lpTop &&
                 puckVX < 0) {
@@ -264,7 +236,6 @@ public class GameWorld {
             puckVY += offset * 0.1;
         }
 
-        // right paddle
         if (puckX + puckR > rpLeft && puckX - puckR < rpRight &&
                 puckY + puckR > rpBottom && puckY - puckR < rpTop &&
                 puckVX > 0) {
@@ -287,21 +258,21 @@ public class GameWorld {
             gameInProgress = false;
             paused = true;
             matchFinished = true;
+
+            // stop music when match ends
+            SoundManager.getInstance().stopGameMusic();
         }
     }
 
     // ==================== Drawing helpers ====================
 
     private void drawRink(GL2 gl) {
-        // light animated background: small color pulse based on puckX
-        float t = (float) ((Math.sin(puckX * 0.01) + 1.0) * 0.5); // 0..1
+        float t = (float) ((Math.sin(puckX * 0.01) + 1.0) * 0.5);
         float base = 0.05f;
 
-        // rink background
         gl.glColor3f(base, base + 0.05f * t, 0.25f + 0.1f * t);
         fillRect(gl, -380, -240, 380, 240);
 
-        // outer rectangle
         gl.glColor3f(0.9f, 0.9f, 0.9f);
         gl.glLineWidth(3);
         gl.glBegin(GL2.GL_LINE_LOOP);
@@ -311,14 +282,12 @@ public class GameWorld {
         gl.glVertex2d(WORLD_LEFT, WORLD_TOP);
         gl.glEnd();
 
-        // center line
         gl.glColor3f(0.8f, 0.2f, 0.2f);
         gl.glBegin(GL2.GL_LINES);
         gl.glVertex2d(0, WORLD_BOTTOM);
         gl.glVertex2d(0, WORLD_TOP);
         gl.glEnd();
 
-        // center circle
         gl.glColor3f(0.8f, 0.2f, 0.2f);
         drawCircleOutline(gl, 0, 0, 60, 48);
     }
@@ -366,8 +335,6 @@ public class GameWorld {
 
         textRenderer.endRendering();
     }
-
-    // low-level helpers
 
     private double clamp(double v, double min, double max) {
         return Math.max(min, Math.min(max, v));

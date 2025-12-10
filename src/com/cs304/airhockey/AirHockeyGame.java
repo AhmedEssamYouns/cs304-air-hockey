@@ -18,23 +18,7 @@ import com.jogamp.opengl.util.FPSAnimator;
 import com.jogamp.opengl.util.awt.TextRenderer;
 
 /**
- * CS304 Air Hockey final project.
- *
- * Screens:
- *  - Main menu
- *  - Player setup (enter names)
- *  - Game
- *  - High scores
- *  - Instructions
- *
- * Controls:
- *  - Main menu: UP / DOWN, ENTER, ESC
- *  - Player setup: type name, BACKSPACE, ENTER, ESC
- *  - Game:
- *      Left player  : W / S
- *      Right player : UP / DOWN
- *      Pause / Play : P or SPACE
- *      Open menu    : ESC (pauses game)
+ * Main window and screen controller for the game.
  */
 public class AirHockeyGame extends JFrame
         implements GLEventListener, KeyListener, PlayerSetupScreen.Listener {
@@ -49,7 +33,8 @@ public class AirHockeyGame extends JFrame
         PLAYER_SETUP,
         GAME,
         HIGH_SCORES,
-        INSTRUCTIONS
+        INSTRUCTIONS,
+        SETTINGS
     }
 
     private Screen currentScreen = Screen.MAIN_MENU;
@@ -59,6 +44,7 @@ public class AirHockeyGame extends JFrame
     private final InstructionsScreen instructions;
     private final GameWorld gameWorld;
     private final PlayerSetupScreen playerSetup;
+    private final SettingsScreen settings;
 
     // Window size (for TextRenderer)
     private int windowWidth = 800;
@@ -73,12 +59,12 @@ public class AirHockeyGame extends JFrame
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        // Create screens / world
         mainMenu = new MainMenuScreen();
         highScores = new HighScoresScreen();
         instructions = new InstructionsScreen();
         gameWorld = new GameWorld(highScores);
         playerSetup = new PlayerSetupScreen(this);
+        settings = new SettingsScreen();
 
         GLProfile profile = GLProfile.getDefault();
         GLCapabilities caps = new GLCapabilities(profile);
@@ -96,10 +82,10 @@ public class AirHockeyGame extends JFrame
         animator = new FPSAnimator(canvas, 60, true);
         animator.start();
 
-        // open menu in "no game yet" mode
         mainMenu.open(false);
-
         canvas.requestFocusInWindow();
+
+        SoundManager.getInstance().playGameMusicLoop();
     }
 
     // ==================== GLEventListener ====================
@@ -144,7 +130,6 @@ public class AirHockeyGame extends JFrame
                 gameWorld.update();
                 gameWorld.draw(gl, textRenderer, windowWidth, windowHeight);
 
-                // If the match has finished, move to high scores
                 if (gameWorld.consumeMatchFinished()) {
                     currentScreen = Screen.HIGH_SCORES;
                     mainMenu.open(false);
@@ -162,6 +147,13 @@ public class AirHockeyGame extends JFrame
                 if (textRenderer == null) return;
                 textRenderer.beginRendering(windowWidth, windowHeight);
                 instructions.draw(textRenderer, windowWidth, windowHeight);
+                textRenderer.endRendering();
+                break;
+
+            case SETTINGS:
+                if (textRenderer == null) return;
+                textRenderer.beginRendering(windowWidth, windowHeight);
+                settings.draw(textRenderer, windowWidth, windowHeight);
                 textRenderer.endRendering();
                 break;
         }
@@ -186,6 +178,8 @@ public class AirHockeyGame extends JFrame
         if (animator != null && animator.isStarted()) {
             animator.stop();
         }
+        // make sure sound stops when app closes
+        SoundManager.getInstance().stopGameMusic();
     }
 
     // ==================== PlayerSetupScreen.Listener ====================
@@ -212,21 +206,20 @@ public class AirHockeyGame extends JFrame
             case MAIN_MENU:
                 handleMenuKeys(code);
                 break;
-
             case PLAYER_SETUP:
                 playerSetup.handleKeyPressed(code);
                 break;
-
             case GAME:
                 handleGameKeyPressed(code);
                 break;
-
             case HIGH_SCORES:
                 handleHighScoreKeys(code);
                 break;
-
             case INSTRUCTIONS:
                 handleInstructionsKeys(code);
+                break;
+            case SETTINGS:
+                handleSettingsKeys(code);
                 break;
         }
     }
@@ -254,6 +247,9 @@ public class AirHockeyGame extends JFrame
                     mainMenu.open(false);
                     currentScreen = Screen.MAIN_MENU;
                     break;
+                case "settings":
+                    currentScreen = Screen.SETTINGS;
+                    break;
                 case "instructions":
                     currentScreen = Screen.INSTRUCTIONS;
                     break;
@@ -265,7 +261,6 @@ public class AirHockeyGame extends JFrame
                     break;
             }
         } else if (code == KeyEvent.VK_ESCAPE) {
-            // When a game is in progress, ESC from menu just closes menu
             if (gameWorld.isGameInProgress()) {
                 gameWorld.setPaused(false);
                 currentScreen = Screen.GAME;
@@ -277,7 +272,6 @@ public class AirHockeyGame extends JFrame
 
     private void handleGameKeyPressed(int code) {
         if (code == KeyEvent.VK_ESCAPE) {
-            // open main menu, pause game
             gameWorld.setPaused(true);
             currentScreen = Screen.MAIN_MENU;
             mainMenu.open(gameWorld.isGameInProgress());
@@ -301,6 +295,21 @@ public class AirHockeyGame extends JFrame
             mainMenu.open(gameWorld.isGameInProgress());
         }
     }
+
+    private void handleSettingsKeys(int code) {
+        if (code == KeyEvent.VK_ENTER || code == KeyEvent.VK_SPACE) {
+            boolean enabled = SoundManager.getInstance().toggleSoundEnabled();
+            if (enabled) {
+                // 🔊 Re-start music regardless of gameInProgress
+                SoundManager.getInstance().playGameMusicLoop();
+            }
+            // if disabled, SoundManager.setSoundEnabled(false) already stops it
+        } else if (code == KeyEvent.VK_ESCAPE) {
+            currentScreen = Screen.MAIN_MENU;
+            mainMenu.open(gameWorld.isGameInProgress());
+        }
+    }
+
 
     @Override
     public void keyReleased(KeyEvent e) {
