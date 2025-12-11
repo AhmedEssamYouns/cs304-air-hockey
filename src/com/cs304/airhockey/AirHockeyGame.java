@@ -18,62 +18,37 @@ import com.jogamp.opengl.util.FPSAnimator;
 import com.jogamp.opengl.util.awt.TextRenderer;
 
 /**
- * CS304 Air Hockey final project.
- * Clean project (no lab1 names, no extra classes).
- *
- * Controls:
- *  - Main menu: UP / DOWN to move, ENTER to select, ESC to quit
- *  - Game: W/S for left paddle, UP/DOWN for right paddle
- *          P or SPACE to pause, ESC to return to menu
+ * Main window and screen controller for the game.
  */
-public class AirHockeyGame extends JFrame implements GLEventListener, KeyListener {
+public class AirHockeyGame extends JFrame
+        implements GLEventListener, KeyListener, PlayerSetupScreen.Listener {
 
     private GLCanvas canvas;
     private FPSAnimator animator;
     private TextRenderer textRenderer;
 
+    // ----- Screens -----
     private enum Screen {
         MAIN_MENU,
+        MODE_SELECT,
+        AI_DIFFICULTY,
+        PLAYER_SETUP,
         GAME,
-        HIGH_SCORES
+        HIGH_SCORES,
+        INSTRUCTIONS,
+        SETTINGS
     }
 
     private Screen currentScreen = Screen.MAIN_MENU;
 
-    private final MainMenuScreen mainMenu = new MainMenuScreen();
-    private final HighScoresScreen highScores = new HighScoresScreen();
-
-    // ---- World bounds (rink) ----
-    private final double WORLD_LEFT   = -360;
-    private final double WORLD_RIGHT  =  360;
-    private final double WORLD_BOTTOM = -220;
-    private final double WORLD_TOP    =  220;
-
-    // ---- Paddles ----
-    private double paddleHalfW = 10;
-    private double paddleHalfH = 60;
-
-    private double leftPaddleX  = -320;
-    private double leftPaddleY  = 0;
-
-    private double rightPaddleX =  320;
-    private double rightPaddleY =  0;
-
-    private double paddleSpeed = 10;
-
-    // ---- Puck ----
-    private double puckX = 0;
-    private double puckY = 0;
-    private double puckR = 12;
-
-    private double puckVX = 6;
-    private double puckVY = 4;
-
-    // ---- Game state ----
-    private int leftScore = 0;
-    private int rightScore = 0;
-    private int winningScore = 5;
-    private boolean paused = false;
+    private final MainMenuScreen mainMenu;
+    private final GameModeScreen gameModeScreen;
+    private final AiDifficultyScreen aiDifficultyScreen;
+    private final HighScoresScreen highScores;
+    private final InstructionsScreen instructions;
+    private final GameWorld gameWorld;
+    private final PlayerSetupScreen playerSetup;
+    private final SettingsScreen settings;
 
     // Window size (for TextRenderer)
     private int windowWidth = 800;
@@ -87,6 +62,15 @@ public class AirHockeyGame extends JFrame implements GLEventListener, KeyListene
         super("CS304 - Air Hockey");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
+
+        mainMenu = new MainMenuScreen();
+        gameModeScreen = new GameModeScreen();
+        aiDifficultyScreen = new AiDifficultyScreen();
+        highScores = new HighScoresScreen();
+        instructions = new InstructionsScreen();
+        gameWorld = new GameWorld(highScores);
+        playerSetup = new PlayerSetupScreen(this);
+        settings = new SettingsScreen();
 
         GLProfile profile = GLProfile.getDefault();
         GLCapabilities caps = new GLCapabilities(profile);
@@ -104,7 +88,11 @@ public class AirHockeyGame extends JFrame implements GLEventListener, KeyListene
         animator = new FPSAnimator(canvas, 60, true);
         animator.start();
 
+        mainMenu.open(false);
         canvas.requestFocusInWindow();
+
+        // Start background music on app launch
+        SoundManager.getInstance().playGameMusicLoop();
     }
 
     // ==================== GLEventListener ====================
@@ -121,7 +109,8 @@ public class AirHockeyGame extends JFrame implements GLEventListener, KeyListene
         gl.glMatrixMode(GL2.GL_MODELVIEW);
         gl.glLoadIdentity();
 
-        textRenderer = new TextRenderer(new Font("SansSerif", Font.BOLD, 18), true, true);
+        // 🔠 big UI font for all screens
+        textRenderer = new TextRenderer(new Font("SansSerif", Font.BOLD, 32), true, true);
     }
 
     @Override
@@ -132,14 +121,69 @@ public class AirHockeyGame extends JFrame implements GLEventListener, KeyListene
 
         switch (currentScreen) {
             case MAIN_MENU:
-                drawMenu(gl);
+                drawMenuBackground(gl);
+                if (textRenderer == null) return;
+                textRenderer.beginRendering(windowWidth, windowHeight);
+                mainMenu.draw(textRenderer, windowWidth, windowHeight);
+                textRenderer.endRendering();
                 break;
+
+            case MODE_SELECT:
+                drawGenericSoftBackground(gl);
+                if (textRenderer == null) return;
+                textRenderer.beginRendering(windowWidth, windowHeight);
+                gameModeScreen.draw(textRenderer, windowWidth, windowHeight);
+                textRenderer.endRendering();
+                break;
+
+            case AI_DIFFICULTY:
+                drawGenericSoftBackground(gl);
+                if (textRenderer == null) return;
+                textRenderer.beginRendering(windowWidth, windowHeight);
+                aiDifficultyScreen.draw(textRenderer, windowWidth, windowHeight);
+                textRenderer.endRendering();
+                break;
+
+            case PLAYER_SETUP:
+                drawGenericSoftBackground(gl);
+                if (textRenderer == null) return;
+                textRenderer.beginRendering(windowWidth, windowHeight);
+                playerSetup.draw(textRenderer, windowWidth, windowHeight);
+                textRenderer.endRendering();
+                break;
+
             case GAME:
-                updateGame();
-                drawGame(gl);
+                gameWorld.update();
+                gameWorld.draw(gl, textRenderer, windowWidth, windowHeight);
+
+                if (gameWorld.consumeMatchFinished()) {
+                    currentScreen = Screen.HIGH_SCORES;
+                    mainMenu.open(false);
+                }
                 break;
+
             case HIGH_SCORES:
-                drawHighScores(gl);
+                drawHighScoresBackground(gl);
+                if (textRenderer == null) return;
+                textRenderer.beginRendering(windowWidth, windowHeight);
+                highScores.draw(textRenderer, windowWidth, windowHeight);
+                textRenderer.endRendering();
+                break;
+
+            case INSTRUCTIONS:
+                drawInstructionsBackground(gl);
+                if (textRenderer == null) return;
+                textRenderer.beginRendering(windowWidth, windowHeight);
+                instructions.draw(textRenderer, windowWidth, windowHeight);
+                textRenderer.endRendering();
+                break;
+
+            case SETTINGS:
+                drawSettingsBackground(gl);
+                if (textRenderer == null) return;
+                textRenderer.beginRendering(windowWidth, windowHeight);
+                settings.draw(textRenderer, windowWidth, windowHeight);
+                textRenderer.endRendering();
                 break;
         }
     }
@@ -163,192 +207,20 @@ public class AirHockeyGame extends JFrame implements GLEventListener, KeyListene
         if (animator != null && animator.isStarted()) {
             animator.stop();
         }
+        SoundManager.getInstance().stopGameMusic();
     }
 
-    // ==================== GAME LOGIC ====================
+    // ==================== PlayerSetupScreen.Listener ====================
 
-    private void startNewGame() {
-        leftScore = 0;
-        rightScore = 0;
-        paused = false;
-        resetPuck(Math.random() < 0.5 ? -1 : 1);
+    @Override
+    public void onCancel() {
+        currentScreen = Screen.MODE_SELECT; // back to mode select instead of main
+    }
+
+    @Override
+    public void onNamesConfirmed(String leftName, String rightName) {
+        gameWorld.startNewMatch(leftName, rightName); // 2-player
         currentScreen = Screen.GAME;
-    }
-
-    private void updateGame() {
-        if (paused) return;
-
-        puckX += puckVX;
-        puckY += puckVY;
-
-        // top / bottom wall collisions
-        if (puckY + puckR > WORLD_TOP) {
-            puckY = WORLD_TOP - puckR;
-            puckVY = -puckVY;
-        } else if (puckY - puckR < WORLD_BOTTOM) {
-            puckY = WORLD_BOTTOM + puckR;
-            puckVY = -puckVY;
-        }
-
-        // paddle collisions
-        checkPaddleCollision();
-
-        // goals
-        if (puckX - puckR < WORLD_LEFT) {
-            rightScore++;
-            resetPuck(-1);
-            checkWin();
-        } else if (puckX + puckR > WORLD_RIGHT) {
-            leftScore++;
-            resetPuck(1);
-            checkWin();
-        }
-    }
-
-    private void resetPuck(int directionToRight) {
-        puckX = 0;
-        puckY = 0;
-        double randomY = (Math.random() - 0.5) * 6;
-        puckVX = 6 * directionToRight;
-        puckVY = randomY;
-    }
-
-    private void checkPaddleCollision() {
-        double lpLeft   = leftPaddleX - paddleHalfW;
-        double lpRight  = leftPaddleX + paddleHalfW;
-        double lpTop    = leftPaddleY + paddleHalfH;
-        double lpBottom = leftPaddleY - paddleHalfH;
-
-        double rpLeft   = rightPaddleX - paddleHalfW;
-        double rpRight  = rightPaddleX + paddleHalfW;
-        double rpTop    = rightPaddleY + paddleHalfH;
-        double rpBottom = rightPaddleY - paddleHalfH;
-
-        // left paddle
-        if (puckX - puckR < lpRight && puckX + puckR > lpLeft &&
-            puckY + puckR > lpBottom && puckY - puckR < lpTop &&
-            puckVX < 0) {
-
-            puckX = lpRight + puckR;
-            puckVX = -puckVX;
-
-            double offset = puckY - leftPaddleY;
-            puckVY += offset * 0.1;
-        }
-
-        // right paddle
-        if (puckX + puckR > rpLeft && puckX - puckR < rpRight &&
-            puckY + puckR > rpBottom && puckY - puckR < rpTop &&
-            puckVX > 0) {
-
-            puckX = rpLeft - puckR;
-            puckVX = -puckVX;
-
-            double offset = puckY - rightPaddleY;
-            puckVY += offset * 0.1;
-        }
-    }
-
-    private void checkWin() {
-        if (leftScore >= winningScore || rightScore >= winningScore) {
-            String winner = (leftScore > rightScore) ? "Left Player" : "Right Player";
-            highScores.addScore(winner, Math.max(leftScore, rightScore));
-            currentScreen = Screen.HIGH_SCORES;
-        }
-    }
-
-    // ==================== DRAWING ====================
-
-    private void drawGame(GL2 gl) {
-        drawRink(gl);
-        drawPaddles(gl);
-        drawPuck(gl);
-        drawGameHUD();
-    }
-
-    private void drawRink(GL2 gl) {
-        background(gl, 0.05f, 0.10f, 0.25f);
-
-        gl.glColor3f(0.9f, 0.9f, 0.9f);
-        gl.glLineWidth(3);
-        gl.glBegin(GL2.GL_LINE_LOOP);
-        gl.glVertex2d(WORLD_LEFT,  WORLD_BOTTOM);
-        gl.glVertex2d(WORLD_RIGHT, WORLD_BOTTOM);
-        gl.glVertex2d(WORLD_RIGHT, WORLD_TOP);
-        gl.glVertex2d(WORLD_LEFT,  WORLD_TOP);
-        gl.glEnd();
-
-        gl.glColor3f(0.8f, 0.2f, 0.2f);
-        gl.glBegin(GL2.GL_LINES);
-        gl.glVertex2d(0, WORLD_BOTTOM);
-        gl.glVertex2d(0, WORLD_TOP);
-        gl.glEnd();
-
-        gl.glColor3f(0.8f, 0.2f, 0.2f);
-        drawCircleOutline(gl, 0, 0, 60, 48);
-    }
-
-    private void drawPaddles(GL2 gl) {
-        gl.glColor3f(0.1f, 0.5f, 1.0f);
-        fillRect(gl,
-                 leftPaddleX - paddleHalfW,
-                 leftPaddleY - paddleHalfH,
-                 leftPaddleX + paddleHalfW,
-                 leftPaddleY + paddleHalfH);
-
-        gl.glColor3f(0.1f, 1.0f, 0.4f);
-        fillRect(gl,
-                 rightPaddleX - paddleHalfW,
-                 rightPaddleY - paddleHalfH,
-                 rightPaddleX + paddleHalfW,
-                 rightPaddleY + paddleHalfH);
-    }
-
-    private void drawPuck(GL2 gl) {
-        gl.glColor3f(1.0f, 0.9f, 0.2f);
-        drawCircle(gl, puckX, puckY, puckR, 32);
-    }
-
-    private void drawGameHUD() {
-        if (textRenderer == null) return;
-
-        textRenderer.beginRendering(windowWidth, windowHeight);
-        textRenderer.setColor(1f, 1f, 1f, 1f);
-
-        String scoreText = "Left: " + leftScore + "   Right: " + rightScore;
-        textRenderer.draw(scoreText, 20, windowHeight - 30);
-
-        String pauseText = "W/S: Left  |  Up/Down: Right  |  P: Pause  |  ESC: Menu";
-        textRenderer.draw(pauseText, 20, 20);
-
-        if (paused) {
-            textRenderer.setColor(1f, 1f, 0f, 1f);
-            textRenderer.draw("PAUSED", windowWidth / 2 - 50, windowHeight / 2);
-        }
-
-        textRenderer.endRendering();
-    }
-
-    private void drawMenu(GL2 gl) {
-        background(gl, 0.0f, 0.0f, 0.0f);
-
-        if (textRenderer == null) return;
-        textRenderer.beginRendering(windowWidth, windowHeight);
-
-        mainMenu.draw(textRenderer, windowWidth, windowHeight);
-
-        textRenderer.endRendering();
-    }
-
-    private void drawHighScores(GL2 gl) {
-        background(gl, 0.0f, 0.0f, 0.0f);
-
-        if (textRenderer == null) return;
-        textRenderer.beginRendering(windowWidth, windowHeight);
-
-        highScores.draw(textRenderer, windowWidth, windowHeight);
-
-        textRenderer.endRendering();
     }
 
     // ==================== KeyListener ====================
@@ -357,124 +229,241 @@ public class AirHockeyGame extends JFrame implements GLEventListener, KeyListene
     public void keyPressed(KeyEvent e) {
         int code = e.getKeyCode();
 
-        if (currentScreen == Screen.MAIN_MENU) {
-            handleMenuKeys(code);
-            return;
-        }
-
-        if (currentScreen == Screen.GAME) {
-            handleGameKeys(code);
-            return;
-        }
-
-        if (currentScreen == Screen.HIGH_SCORES) {
-            handleHighScoreKeys(code);
+        switch (currentScreen) {
+            case MAIN_MENU:
+                handleMenuKeys(code);
+                break;
+            case MODE_SELECT:
+                handleModeSelectKeys(code);
+                break;
+            case AI_DIFFICULTY:
+                handleAiDifficultyKeys(code);
+                break;
+            case PLAYER_SETUP:
+                playerSetup.handleKeyPressed(code);
+                break;
+            case GAME:
+                handleGameKeyPressed(code);
+                break;
+            case HIGH_SCORES:
+                handleHighScoreKeys(code);
+                break;
+            case INSTRUCTIONS:
+                handleInstructionsKeys(code);
+                break;
+            case SETTINGS:
+                handleSettingsKeys(code);
+                break;
         }
     }
 
     private void handleMenuKeys(int code) {
         if (code == KeyEvent.VK_UP) {
             mainMenu.moveUp();
+            SoundManager.getInstance().playClick();
         } else if (code == KeyEvent.VK_DOWN) {
             mainMenu.moveDown();
+            SoundManager.getInstance().playClick();
         } else if (code == KeyEvent.VK_ENTER) {
+            SoundManager.getInstance().playClick();
             String action = mainMenu.getSelectedAction();
-            if ("start".equals(action)) {
-                startNewGame();
-            } else if ("highscores".equals(action)) {
-                currentScreen = Screen.HIGH_SCORES;
-            } else if ("quit".equals(action)) {
-                System.exit(0);
+            switch (action) {
+                case "play":
+                    gameModeScreen.reset();
+                    currentScreen = Screen.MODE_SELECT;
+                    break;
+                case "continue":
+                    if (gameWorld.isGameInProgress()) {
+                        gameWorld.setPaused(false);
+                        currentScreen = Screen.GAME;
+                    }
+                    break;
+                case "settings":
+                    currentScreen = Screen.SETTINGS;
+                    break;
+                case "instructions":
+                    currentScreen = Screen.INSTRUCTIONS;
+                    break;
+                case "highscores":
+                    currentScreen = Screen.HIGH_SCORES;
+                    break;
+                case "quit":
+                    System.exit(0);
+                    break;
             }
         } else if (code == KeyEvent.VK_ESCAPE) {
-            System.exit(0);
+            if (gameWorld.isGameInProgress()) {
+                gameWorld.setPaused(false);
+                currentScreen = Screen.GAME;
+            } else {
+                System.exit(0);
+            }
         }
     }
 
-    private void handleGameKeys(int code) {
-        if (code == KeyEvent.VK_W) {
-            leftPaddleY += paddleSpeed;
-        } else if (code == KeyEvent.VK_S) {
-            leftPaddleY -= paddleSpeed;
-        }
-
+    private void handleModeSelectKeys(int code) {
         if (code == KeyEvent.VK_UP) {
-            rightPaddleY += paddleSpeed;
+            gameModeScreen.moveUp();
+            SoundManager.getInstance().playClick();
         } else if (code == KeyEvent.VK_DOWN) {
-            rightPaddleY -= paddleSpeed;
-        }
-
-        leftPaddleY = clamp(leftPaddleY,
-                            WORLD_BOTTOM + paddleHalfH,
-                            WORLD_TOP - paddleHalfH);
-        rightPaddleY = clamp(rightPaddleY,
-                             WORLD_BOTTOM + paddleHalfH,
-                             WORLD_TOP - paddleHalfH);
-
-        if (code == KeyEvent.VK_P || code == KeyEvent.VK_SPACE) {
-            paused = !paused;
-        }
-
-        if (code == KeyEvent.VK_ESCAPE) {
+            gameModeScreen.moveDown();
+            SoundManager.getInstance().playClick();
+        } else if (code == KeyEvent.VK_ENTER) {
+            SoundManager.getInstance().playClick();
+            String action = gameModeScreen.getSelectedAction();
+            switch (action) {
+                case "pvp":
+                    playerSetup.reset();
+                    currentScreen = Screen.PLAYER_SETUP;
+                    break;
+                case "ai":
+                    aiDifficultyScreen.reset();
+                    currentScreen = Screen.AI_DIFFICULTY;
+                    break;
+                case "back":
+                    currentScreen = Screen.MAIN_MENU;
+                    break;
+            }
+        } else if (code == KeyEvent.VK_ESCAPE) {
             currentScreen = Screen.MAIN_MENU;
+        }
+    }
+
+    private void handleAiDifficultyKeys(int code) {
+        if (code == KeyEvent.VK_UP) {
+            aiDifficultyScreen.moveUp();
+            SoundManager.getInstance().playClick();
+        } else if (code == KeyEvent.VK_DOWN) {
+            aiDifficultyScreen.moveDown();
+            SoundManager.getInstance().playClick();
+        } else if (code == KeyEvent.VK_ENTER) {
+            SoundManager.getInstance().playClick();
+            String action = aiDifficultyScreen.getSelectedAction();
+            switch (action) {
+                case "easy":
+                    gameWorld.startNewMatch("Player 1", "AI (Easy)", true, GameWorld.Difficulty.EASY);
+                    currentScreen = Screen.GAME;
+                    break;
+                case "medium":
+                    gameWorld.startNewMatch("Player 1", "AI (Medium)", true, GameWorld.Difficulty.MEDIUM);
+                    currentScreen = Screen.GAME;
+                    break;
+                case "hard":
+                    gameWorld.startNewMatch("Player 1", "AI (Hard)", true, GameWorld.Difficulty.HARD);
+                    currentScreen = Screen.GAME;
+                    break;
+                case "back":
+                    currentScreen = Screen.MODE_SELECT;
+                    break;
+            }
+        } else if (code == KeyEvent.VK_ESCAPE) {
+            currentScreen = Screen.MODE_SELECT;
+        }
+    }
+
+    private void handleGameKeyPressed(int code) {
+        if (code == KeyEvent.VK_ESCAPE) {
+            gameWorld.setPaused(true);
+            currentScreen = Screen.MAIN_MENU;
+            mainMenu.open(gameWorld.isGameInProgress());
+        } else if (code == KeyEvent.VK_P || code == KeyEvent.VK_SPACE) {
+            gameWorld.togglePause();
+        } else {
+            gameWorld.handleKeyPressed(code);
         }
     }
 
     private void handleHighScoreKeys(int code) {
         if (code == KeyEvent.VK_ESCAPE || code == KeyEvent.VK_ENTER) {
             currentScreen = Screen.MAIN_MENU;
+            mainMenu.open(gameWorld.isGameInProgress());
+        }
+    }
+
+    private void handleInstructionsKeys(int code) {
+        if (code == KeyEvent.VK_ESCAPE || code == KeyEvent.VK_ENTER) {
+            currentScreen = Screen.MAIN_MENU;
+            mainMenu.open(gameWorld.isGameInProgress());
+        }
+    }
+
+    private void handleSettingsKeys(int code) {
+        if (code == KeyEvent.VK_ENTER || code == KeyEvent.VK_SPACE) {
+            SoundManager.getInstance().playClick();
+            boolean enabled = SoundManager.getInstance().toggleSoundEnabled();
+            if (enabled) {
+                SoundManager.getInstance().playGameMusicLoop();
+            }
+        } else if (code == KeyEvent.VK_ESCAPE) {
+            currentScreen = Screen.MAIN_MENU;
+            mainMenu.open(gameWorld.isGameInProgress());
         }
     }
 
     @Override
-    public void keyReleased(KeyEvent e) { }
+    public void keyReleased(KeyEvent e) {
+        if (currentScreen == Screen.GAME) {
+            gameWorld.handleKeyReleased(e.getKeyCode());
+        }
+    }
 
     @Override
-    public void keyTyped(KeyEvent e) { }
-
-    // ==================== Utility drawing helpers ====================
-
-    private double clamp(double v, double min, double max) {
-        return Math.max(min, Math.min(max, v));
-    }
-
-    private void background(GL2 gl, float r, float g, float b) {
-        gl.glColor3f(r, g, b);
-        fillRect(gl, -380, -240, 380, 240);
-    }
-
-    private void fillRect(GL2 gl, double x1, double y1, double x2, double y2) {
-        double left = Math.min(x1, x2);
-        double right = Math.max(x1, x2);
-        double bottom = Math.min(y1, y2);
-        double top = Math.max(y1, y2);
-        gl.glBegin(GL2.GL_POLYGON);
-        gl.glVertex2d(left,  bottom);
-        gl.glVertex2d(right, bottom);
-        gl.glVertex2d(right, top);
-        gl.glVertex2d(left,  top);
-        gl.glEnd();
-    }
-
-    private void drawCircle(GL2 gl, double cx, double cy, double r, int segments) {
-        gl.glBegin(GL2.GL_POLYGON);
-        for (int i = 0; i < segments; i++) {
-            double t = 2.0 * Math.PI * i / segments;
-            double x = cx + r * Math.cos(t);
-            double y = cy + r * Math.sin(t);
-            gl.glVertex2d(x, y);
+    public void keyTyped(KeyEvent e) {
+        if (currentScreen == Screen.PLAYER_SETUP) {
+            playerSetup.handleKeyTyped(e.getKeyChar());
         }
-        gl.glEnd();
     }
 
-    private void drawCircleOutline(GL2 gl, double cx, double cy, double r, int segments) {
-        gl.glBegin(GL2.GL_LINE_LOOP);
-        for (int i = 0; i < segments; i++) {
-            double t = 2.0 * Math.PI * i / segments;
-            double x = cx + r * Math.cos(t);
-            double y = cy + r * Math.sin(t);
-            gl.glVertex2d(x, y);
-        }
+    // ==================== Background helpers ====================
+
+    private void drawMenuBackground(GL2 gl) {
+        drawVerticalGradient(gl,
+                0.05f, 0.08f, 0.20f,  // top: deep blue
+                0.02f, 0.02f, 0.05f   // bottom: almost black
+        );
+    }
+
+    private void drawSettingsBackground(GL2 gl) {
+        drawVerticalGradient(gl,
+                0.10f, 0.05f, 0.20f,  // top: purple
+                0.02f, 0.03f, 0.08f   // bottom: dark indigo
+        );
+    }
+
+    private void drawInstructionsBackground(GL2 gl) {
+        drawVerticalGradient(gl,
+                0.18f, 0.10f, 0.05f,  // top: warm orange/brown
+                0.05f, 0.02f, 0.02f   // bottom: dark warm
+        );
+    }
+
+    private void drawHighScoresBackground(GL2 gl) {
+        drawVerticalGradient(gl,
+                0.08f, 0.10f, 0.16f,
+                0.01f, 0.02f, 0.04f
+        );
+    }
+
+    private void drawGenericSoftBackground(GL2 gl) {
+        drawVerticalGradient(gl,
+                0.06f, 0.08f, 0.16f,
+                0.01f, 0.02f, 0.05f
+        );
+    }
+
+    private void drawVerticalGradient(GL2 gl,
+                                      float rTop, float gTop, float bTop,
+                                      float rBottom, float gBottom, float bBottom) {
+        gl.glBegin(GL2.GL_QUADS);
+
+        gl.glColor3f(rTop, gTop, bTop);
+        gl.glVertex2d(-380, 240);
+        gl.glVertex2d(380, 240);
+
+        gl.glColor3f(rBottom, gBottom, bBottom);
+        gl.glVertex2d(380, -240);
+        gl.glVertex2d(-380, -240);
+
         gl.glEnd();
     }
 }
