@@ -1,0 +1,116 @@
+package com.cs304.airhockey;
+
+import com.jogamp.opengl.util.awt.TextRenderer;
+
+import java.awt.geom.Rectangle2D;
+
+/**
+ * Screen for choosing game mode: Local 2 Players or Vs AI.
+ */
+public class ModeSelectScreen {
+
+    private static class Item {
+        String label;
+        String action;
+        Item(String label, String action) {
+            this.label = label;
+            this.action = action;
+        }
+    }
+
+    private final Item[] items;
+    private int selected = 0;
+
+    public ModeSelectScreen() {
+        items = new Item[] {
+                new Item("Local 2 Players", "local"),
+                new Item("Vs AI",           "vsai"),
+                new Item("Back",            "back")
+        };
+    }
+
+    public void moveUp() {
+        selected--;
+        if (selected < 0) selected = items.length - 1;
+    }
+
+    public void moveDown() {
+        selected++;
+        if (selected >= items.length) selected = 0;
+    }
+
+    public String getSelectedAction() {
+        return items[selected].action;
+    }
+
+    public void draw(TextRenderer r, int w, int h) {
+        int centerX = w / 2;
+
+        double t = System.nanoTime() / 1_000_000_000.0;
+        float glow = 0.5f + 0.5f * (float) Math.sin(t * 2.5);
+        float wobble = (float) Math.sin(t * 3.0) * 4f;
+
+        // Title
+        String title = "Choose Game Mode";
+        Rectangle2D tb = r.getBounds(title);
+        int titleX = centerX - (int) (tb.getWidth() / 2);
+        int titleY = h - 140 + (int) wobble;
+
+        r.setColor(0f, 0f, 0f, 0.8f);
+        r.draw(title, titleX + 4, titleY - 4);
+
+        r.setColor(0.15f, 0.25f, 0.9f, 1f);
+        r.draw(title, titleX + 1, titleY - 1);
+
+        r.setColor(0.6f + 0.4f * glow,
+                0.95f,
+                1.0f,
+                1f);
+        r.draw(title, titleX, titleY);
+
+        // Items
+        int baseY = h / 2 + 40;
+        int lineSpacing = 50;
+
+        for (int i = 0; i < items.length; i++) {
+            boolean isSelected = (i == selected);
+            String text = items[i].label;
+
+            Rectangle2D mb = r.getBounds(text);
+            int itemX = centerX - (int) (mb.getWidth() / 2);
+            int itemY = baseY - i * lineSpacing;
+
+            if (isSelected) {
+                int yOffset = (int) (Math.sin(t * 5.0) * 3.0);
+                itemY += yOffset;
+
+                r.setColor(0f, 0f, 0f, 0.8f);
+                r.draw("▶", itemX - 40, itemY - 3);
+
+                r.setColor(0f, 0f, 0f, 0.7f);
+                r.draw(text, itemX + 3, itemY - 3);
+
+                float pulse = 0.7f + 0.3f * (float) Math.sin(t * 7.0);
+                r.setColor(0.1f, pulse, 0.9f, 1f);
+                r.draw(text, itemX, itemY);
+            } else {
+                r.setColor(0f, 0f, 0f, 0.5f);
+                r.draw(text, itemX + 2, itemY - 2);
+
+                r.setColor(0.8f, 0.85f, 0.95f, 0.9f);
+                r.draw(text, itemX, itemY);
+            }
+        }
+
+        // footer
+        String footer = "↑ / ↓ move   ·   ENTER select   ·   ESC back";
+        Rectangle2D fb = r.getBounds(footer);
+        int footerX = centerX - (int) (fb.getWidth() / 2);
+
+        r.setColor(0f, 0f, 0f, 0.7f);
+        r.draw(footer, footerX + 2, 40);
+
+        r.setColor(0.7f, 0.9f, 1.0f, 1f);
+        r.draw(footer, footerX, 44);
+    }
+}
