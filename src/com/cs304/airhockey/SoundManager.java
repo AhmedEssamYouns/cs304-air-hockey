@@ -1,17 +1,16 @@
 package com.cs304.airhockey;
 
-import javax.sound.sampled.AudioInputStream;
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.Clip;
+import javax.sound.sampled.*;
+import java.io.IOException;
 import java.net.URL;
 
 /**
- * Simple singleton sound manager for background music + SFX.
- *
- * Expects these files on the classpath (resources root):
- *   /sounds/game_music.wav
- *   /sounds/hit.wav
- *   /sounds/onclick.wav
+ * Simple singleton sound manager.
+ * Uses WAV sounds from classpath:
+ *  - /sounds/game_music.wav
+ *  - /sounds/hit.wav
+ *  - /sounds/onclick.wav
+ *  - /sounds/game-over.wav
  */
 public class SoundManager {
 
@@ -23,50 +22,79 @@ public class SoundManager {
 
     private boolean soundEnabled = true;
 
-    // Background music: just one looped clip
-    private Clip gameMusicClip;
+    // Background music clip (looped)
+    private Clip musicClip;
 
-    // SFX pools so multiple sounds can overlap
-    private static final int POOL_SIZE = 5;
-    private Clip[] hitPool;
-    private Clip[] clickPool;
-
+    // ---- ctor ----
     private SoundManager() {
-        // Load music (single clip)
-        gameMusicClip = loadClip("/sounds/game_music.wav");
+        // load only the music as persistent Clip
+        musicClip = loadClip("/sounds/game_music.wav");
 
-        // Load SFX into small pools so they can overlap
-        hitPool = new Clip[POOL_SIZE];
-        clickPool = new Clip[POOL_SIZE];
-
-        for (int i = 0; i < POOL_SIZE; i++) {
-            hitPool[i] = loadClip("/sounds/hit.wav");
-            clickPool[i] = loadClip("/sounds/onclick.wav");
-        }
+        // just to validate paths at startup (no need to keep clips)
+        preload("/sounds/hit.wav");
+        preload("/sounds/onclick.wav");
+        preload("/sounds/game-over.wav");
     }
 
-    // ---------- Loading helper ----------
+    // ============ Loading helpers ============
 
-    private Clip loadClip(String resourcePath) {
+    /** Load a clip that we keep (for looped music). */
+    private Clip loadClip(String path) {
         try {
-            URL url = SoundManager.class.getResource(resourcePath);
+            URL url = SoundManager.class.getResource(path);
             if (url == null) {
-                System.err.println("❌ Sound not found on classpath: " + resourcePath);
+                System.err.println("❌ Sound not found on classpath: " + path);
                 return null;
             }
-            System.out.println("✅ Loading sound from: " + url);
+            System.out.println("✅ Loading (loop) sound from: " + url);
             AudioInputStream audioIn = AudioSystem.getAudioInputStream(url);
             Clip clip = AudioSystem.getClip();
             clip.open(audioIn);
             return clip;
-        } catch (Exception ex) {
-            System.err.println("❌ Failed to load sound: " + resourcePath);
+        } catch (UnsupportedAudioFileException | IOException | LineUnavailableException ex) {
+            System.err.println("❌ Failed to load loop sound: " + path);
             ex.printStackTrace();
             return null;
         }
     }
 
-    // ---------- Global enable/disable ----------
+    /** Just check that a resource exists & is a valid WAV. */
+    private void preload(String path) {
+        try {
+            URL url = SoundManager.class.getResource(path);
+            if (url == null) {
+                System.err.println("❌ (preload) Sound not found: " + path);
+                return;
+            }
+            System.out.println("✅ (preload) Found sound: " + url);
+            AudioInputStream audioIn = AudioSystem.getAudioInputStream(url);
+            audioIn.close();
+        } catch (Exception ex) {
+            System.err.println("❌ (preload) Failed for: " + path);
+            ex.printStackTrace();
+        }
+    }
+
+    /** For short SFX that can overlap (hit, click, game-over). Creates a fresh Clip each time. */
+    private void playOneShot(String path) {
+        if (!soundEnabled) return;
+        try {
+            URL url = SoundManager.class.getResource(path);
+            if (url == null) {
+                System.err.println("❌ One-shot sound not found: " + path);
+                return;
+            }
+            AudioInputStream audioIn = AudioSystem.getAudioInputStream(url);
+            Clip clip = AudioSystem.getClip();
+            clip.open(audioIn);
+            clip.start();
+        } catch (Exception ex) {
+            System.err.println("❌ Failed to play one-shot: " + path);
+            ex.printStackTrace();
+        }
+    }
+
+    // ============ Global sound toggle ============
 
     public boolean isSoundEnabled() {
         return soundEnabled;
@@ -85,55 +113,59 @@ public class SoundManager {
         return soundEnabled;
     }
 
-    // ---------- Music (single loop, no overlap needed) ----------
+    // ============ Background music ============
 
     public void playGameMusicLoop() {
-        if (!soundEnabled || gameMusicClip == null) return;
+        if (!soundEnabled || musicClip == null) return;
+        if (musicClip.isRunning()) return;
 
-        if (gameMusicClip.isRunning()) {
-            return; // already playing
-        }
-        gameMusicClip.setFramePosition(0);
-        gameMusicClip.loop(Clip.LOOP_CONTINUOUSLY);
+        musicClip.setFramePosition(0);
+        musicClip.loop(Clip.LOOP_CONTINUOUSLY);
     }
 
     public void stopGameMusic() {
-        if (gameMusicClip != null && gameMusicClip.isRunning()) {
-            gameMusicClip.stop();
+        if (musicClip != null && musicClip.isRunning()) {
+            musicClip.stop();
         }
     }
 
-    // ---------- SFX with overlap support ----------
+    // ============ SFX ============
 
-    private void playFromPool(Clip[] pool) {
-        if (!soundEnabled || pool == null) return;
-
-        // 1) Try to find a free clip
-        for (Clip clip : pool) {
-            if (clip == null) continue;
-            if (!clip.isRunning()) {
-                clip.setFramePosition(0);
-                clip.start();
-                return;
-            }
-        }
-
-        // 2) All clips are busy -> just restart the first one
-        Clip first = pool[0];
-        if (first != null) {
-            first.stop();
-            first.setFramePosition(0);
-            first.start();
-        }
-    }
-
-    /** Called when puck hits a paddle – can overlap if hit happens fast. */
-    public void playHit() {
-        playFromPool(hitPool);
-    }
-
-    /** Called when menu items / options are selected or moved. */
     public void playClick() {
-        playFromPool(clickPool);
+        playOneShot("/sounds/onclick.wav");
+    }
+
+    public void playHit() {
+        playOneShot("/sounds/hit.wav");
+    }
+
+    /**
+     * Game over vs AI:
+     *  - stop bg music
+     *  - play /sounds/game-over.wav once
+     *  - after delayMs, resume bg music (if sound still enabled)
+     */
+    public void playGameOverThenResume(final long delayMs) {
+        if (!soundEnabled) return;
+
+        // pause bg music first
+        stopGameMusic();
+
+        // play game over sound once
+        playOneShot("/sounds/game-over.wav");
+
+        // resume bg after delay in a background thread
+        Thread t = new Thread(() -> {
+            try {
+                Thread.sleep(delayMs);
+            } catch (InterruptedException ignored) {
+            }
+            if (soundEnabled) {
+                playGameMusicLoop();
+            }
+        });
+
+        t.setDaemon(true);
+        t.start();
     }
 }

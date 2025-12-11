@@ -71,6 +71,15 @@ public class GameWorld {
     private int playerLives = 3;
     private int level = 1;
 
+    // ----- Round-start countdown (3..2..1) -----
+    private boolean roundStarting = false;
+    private int roundFramesTotal = 180;       // ~3 seconds at 60 FPS
+    private int roundFramesRemaining = 0;
+    private int nextServeDirection = 1;       // +1 = towards right, -1 = towards left
+
+    // speed progression for AI mode levels
+    private double puckSpeedMultiplier = 1.0;
+
     private final HighScoresScreen highScores;
 
     public GameWorld(HighScoresScreen highScores) {
@@ -117,14 +126,16 @@ public class GameWorld {
         // reset key state
         wPressed = sPressed = upPressed = downPressed = false;
 
-        // reset single-player meta
+        // reset meta
+        puckSpeedMultiplier = 1.0;
         if (vsAi) {
             playerScore = 0;
             playerLives = 3;
             level = 1;
         }
 
-        resetPuck(Math.random() < 0.5 ? -1 : 1);
+        // center puck and start countdown for first serve
+        startRoundCountdown(Math.random() < 0.5 ? -1 : 1);
 
         // background music (no double-start issue)
         SoundManager.getInstance().playGameMusicLoop();
@@ -149,6 +160,10 @@ public class GameWorld {
         puckY = 0;
         puckVX = 6;
         puckVY = 4;
+
+        roundStarting = false;
+        roundFramesRemaining = 0;
+        puckSpeedMultiplier = 1.0;
 
         SoundManager.getInstance().stopGameMusic();
     }
@@ -195,8 +210,19 @@ public class GameWorld {
 
     public void update() {
         if (!gameInProgress || paused) return;
+
         updatePaddles();
-        updatePuck();
+
+        if (roundStarting) {
+            if (roundFramesRemaining > 0) {
+                roundFramesRemaining--;
+            }
+            if (roundFramesRemaining <= 0) {
+                launchPuck();
+            }
+        } else {
+            updatePuck();
+        }
     }
 
     public void draw(GL2 gl, TextRenderer textRenderer, int windowWidth, int windowHeight) {
@@ -302,8 +328,11 @@ public class GameWorld {
                 handleAiGoal();
             } else {
                 rightScore++;
-                resetPuck(-1);
-                checkWinTwoPlayer();
+                boolean someoneWon = checkWinTwoPlayer();
+                if (!someoneWon) {
+                    // serve towards right player (positive X) or whoever conceded
+                    startRoundCountdown(-1);
+                }
             }
         } else if (puckX + puckR > WORLD_RIGHT) {
             // Left (human) scores on right goal
@@ -311,25 +340,43 @@ public class GameWorld {
                 handlePlayerGoal();
             } else {
                 leftScore++;
-                resetPuck(1);
-                checkWinTwoPlayer();
+                boolean someoneWon = checkWinTwoPlayer();
+                if (!someoneWon) {
+                    // serve towards left player (negative X) or whoever conceded
+                    startRoundCountdown(1);
+                }
             }
         }
     }
 
-    private void resetPuck(int directionToRight) {
+    // start a countdown for the next round, freezing the puck at center
+    private void startRoundCountdown(int directionToRight) {
+        roundStarting = true;
+        nextServeDirection = directionToRight;
+        roundFramesRemaining = roundFramesTotal;
+
+        // place puck at center and freeze it
         puckX = 0;
         puckY = 0;
+        puckVX = 0;
+        puckVY = 0;
+    }
+
+    // actually launch the puck after countdown
+    private void launchPuck() {
         double randomY = (Math.random() - 0.5) * 6;
-        puckVX = 6 * directionToRight;
-        puckVY = randomY;
+
+        double baseSpeed = 6.0 * puckSpeedMultiplier;
+        puckVX = baseSpeed * nextServeDirection;
+        puckVY = randomY * puckSpeedMultiplier;
+
+        roundStarting = false;
     }
 
     private void handlePlayerGoal() {
         leftScore++;
         playerScore += 100 * level;
 
-        // hit sound gives feedback
         SoundManager.getInstance().playHit();
 
         if (leftScore >= winningScore) {
@@ -339,12 +386,11 @@ public class GameWorld {
             rightScore = 0;
 
             // Slightly faster puck as level rises
-            puckVX *= 1.05;
-            puckVY *= 1.05;
+            puckSpeedMultiplier *= 1.05;
         }
 
-        // next serve from center towards AI
-        resetPuck(-1);
+        // next serve from center towards AI (positive X)
+        startRoundCountdown(-1);
     }
 
     private void handleAiGoal() {
@@ -352,7 +398,7 @@ public class GameWorld {
         playerLives--;
 
         if (playerLives <= 0) {
-            // Game over for player
+            // Game over for player (vs AI)
             gameInProgress = false;
             paused = true;
             matchFinished = true;
@@ -360,10 +406,11 @@ public class GameWorld {
             // record high score for player
             highScores.addScore(leftPlayerName, playerScore);
 
-            SoundManager.getInstance().stopGameMusic();
+            // play game-over sound and pause bg music for 5 seconds
+            SoundManager.getInstance().playGameOverThenResume(5000);
         } else {
-            // serve towards player again
-            resetPuck(1);
+            // serve towards player again (negative X)
+            startRoundCountdown(1);
         }
     }
 
@@ -407,8 +454,8 @@ public class GameWorld {
         }
     }
 
-    private void checkWinTwoPlayer() {
-        if (vsAi) return; // single-player uses lives/levels instead
+    private boolean checkWinTwoPlayer() {
+        if (vsAi) return false; // single-player uses lives/levels instead
 
         if (leftScore >= winningScore || rightScore >= winningScore) {
             String winnerName = (leftScore > rightScore) ? leftPlayerName : rightPlayerName;
@@ -421,7 +468,9 @@ public class GameWorld {
             matchFinished = true;
 
             SoundManager.getInstance().stopGameMusic();
+            return true;
         }
+        return false;
     }
 
     // ==================== Drawing helpers ====================
@@ -505,6 +554,26 @@ public class GameWorld {
                     "  |  P: Pause  |  ESC: Menu";
         }
         textRenderer.draw(bottomLine, 20, 20);
+
+        // Round-start countdown in center (only while game running and not paused)
+        if (gameInProgress && !paused && roundStarting && roundFramesRemaining > 0) {
+            int third = roundFramesTotal / 3;
+            int remaining = roundFramesRemaining;
+            String label;
+            if (remaining > 2 * third) {
+                label = "3";
+            } else if (remaining > third) {
+                label = "2";
+            } else {
+                label = "1";
+            }
+
+            textRenderer.setColor(1f, 1f, 0.3f, 1f);
+            int approxWidth = 40;
+            int x = windowWidth / 2 - approxWidth / 2;
+            int y = windowHeight / 2 + 40;
+            textRenderer.draw(label, x, y);
+        }
 
         if (paused) {
             textRenderer.setColor(1f, 1f, 0f, 1f);
