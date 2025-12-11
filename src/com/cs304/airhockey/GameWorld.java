@@ -17,6 +17,33 @@ public class GameWorld {
         HARD
     }
 
+    // Game type
+    private enum GameType {
+        TWO_PLAYERS,
+        VS_AI,
+        FOUR_PLAYERS_2V2,
+        FOUR_PLAYERS_FFA
+    }
+
+    private enum Side {
+        LEFT,
+        RIGHT,
+        TOP,
+        BOTTOM
+    }
+
+    private enum LastHit {
+        NONE,
+        LEFT_MAIN,
+        LEFT_SECOND,
+        RIGHT_MAIN,
+        RIGHT_SECOND,
+        TOP,
+        BOTTOM
+    }
+
+    private GameType gameType = GameType.TWO_PLAYERS;
+
     // ----- World bounds (rink) -----
     private final double WORLD_LEFT = -360;
     private final double WORLD_RIGHT = 360;
@@ -24,14 +51,29 @@ public class GameWorld {
     private final double WORLD_TOP = 220;
 
     // ----- Paddles -----
+    // vertical side paddles (used in all modes)
     private double paddleHalfW = 10;
     private double paddleHalfH = 60;
 
     private double leftPaddleX = -320;
-    private double leftPaddleY = 0;
+    private double leftPaddleY = 0;      // main left paddle
 
     private double rightPaddleX = 320;
-    private double rightPaddleY = 0;
+    private double rightPaddleY = 0;     // main right paddle
+
+    // extra vertical paddles for 4-player 2v2
+    private double leftPaddle2Y = -120;
+    private double rightPaddle2Y = 120;
+
+    // horizontal paddles for 4-player free-for-all
+    private double horizontalPaddleHalfW = 60;
+    private double horizontalPaddleHalfH = 10;
+
+    private double topPaddleX = 0;
+    private double topPaddleY = WORLD_TOP - 40;
+
+    private double bottomPaddleX = 0;
+    private double bottomPaddleY = WORLD_BOTTOM + 40;
 
     private double paddleSpeed = 6;
 
@@ -41,6 +83,19 @@ public class GameWorld {
     private boolean upPressed = false;
     private boolean downPressed = false;
 
+    // extra keys for 4-player modes
+    // 2v2 second paddles
+    private boolean tPressed = false;
+    private boolean gPressed = false;
+    private boolean iPressed = false;
+    private boolean kPressed = false;
+
+    // free-for-all horizontal paddles
+    private boolean aPressed = false;
+    private boolean dPressed = false;
+    private boolean jPressed = false;
+    private boolean lPressed = false;
+
     // ----- Puck -----
     private double puckX = 0;
     private double puckY = 0;
@@ -49,6 +104,8 @@ public class GameWorld {
     private double puckVX = 6;
     private double puckVY = 4;
 
+    private LastHit lastHit = LastHit.NONE;
+
     // ----- Game state -----
     private int leftScore = 0;
     private int rightScore = 0;
@@ -56,9 +113,27 @@ public class GameWorld {
     private boolean paused = false;
     private boolean gameInProgress = false;
 
-    // Player labels
+    // 2-player / vsAI labels
     private String leftPlayerName = "Left Player";
     private String rightPlayerName = "Right Player";
+
+    // 4-player 2v2 names (two per side)
+    private String leftTeamP1Name = "Left P1";
+    private String leftTeamP2Name = "Left P2";
+    private String rightTeamP1Name = "Right P1";
+    private String rightTeamP2Name = "Right P2";
+
+    // 4-player free-for-all names and scores
+    private String ffaLeftName = "Left Player";
+    private String ffaRightName = "Right Player";
+    private String ffaTopName = "Top Player";
+    private String ffaBottomName = "Bottom Player";
+
+    private int ffaLeftScore = 0;
+    private int ffaRightScore = 0;
+    private int ffaTopScore = 0;
+    private int ffaBottomScore = 0;
+    private int ffaWinningScore = 5;
 
     private boolean matchFinished = false;
 
@@ -96,49 +171,83 @@ public class GameWorld {
     }
 
     /**
-     * Start a new match, with option to play vs AI.
+     * Start a new match, with option to play vs AI (2 players only).
      */
     public void startNewMatch(String leftName,
                               String rightName,
                               boolean vsAi,
                               Difficulty difficulty) {
-        this.leftPlayerName = (leftName == null || leftName.trim().isEmpty())
-                ? "Left Player"
-                : leftName.trim();
+        this.gameType = vsAi ? GameType.VS_AI : GameType.TWO_PLAYERS;
 
-        this.rightPlayerName = (rightName == null || rightName.trim().isEmpty())
-                ? "Right Player"
-                : rightName.trim();
+        this.leftPlayerName = sanitizeName(leftName, "Left Player");
+        this.rightPlayerName = sanitizeName(rightName, "Right Player");
 
         this.vsAi = vsAi;
         this.aiDifficulty = difficulty;
 
-        leftScore = 0;
-        rightScore = 0;
-        paused = false;
-        gameInProgress = true;
-        matchFinished = false;
+        resetCommonState();
+    }
 
-        // reset paddles
+    /**
+     * Start a 4 players 2 vs 2 match (two paddles on left, two on right).
+     */
+    public void startNewMatch2v2(String left1, String left2,
+                                 String right1, String right2) {
+        this.gameType = GameType.FOUR_PLAYERS_2V2;
+        this.vsAi = false;
+        this.aiDifficulty = Difficulty.MEDIUM;
+
+        this.leftTeamP1Name = sanitizeName(left1, "Left P1");
+        this.leftTeamP2Name = sanitizeName(left2, "Left P2");
+        this.rightTeamP1Name = sanitizeName(right1, "Right P1");
+        this.rightTeamP2Name = sanitizeName(right2, "Right P2");
+
+        // Team labels used in some HUD text
+        this.leftPlayerName = leftTeamP1Name + " & " + leftTeamP2Name;
+        this.rightPlayerName = rightTeamP1Name + " & " + rightTeamP2Name;
+
+        resetCommonState();
+
+        // nicer starting positions for paddles
+        leftPaddleY = 80;
+        leftPaddle2Y = -80;
+        rightPaddleY = 80;
+        rightPaddle2Y = -80;
+    }
+
+    /**
+     * Start a 4 players free-for-all:
+     * - Left side
+     * - Right side
+     * - Top
+     * - Bottom
+     */
+    public void startNewFreeForAll(String leftName, String rightName,
+                                   String topName, String bottomName) {
+        this.gameType = GameType.FOUR_PLAYERS_FFA;
+        this.vsAi = false;
+        this.aiDifficulty = Difficulty.MEDIUM;
+
+        this.ffaLeftName = sanitizeName(leftName, "Left Player");
+        this.ffaRightName = sanitizeName(rightName, "Right Player");
+        this.ffaTopName = sanitizeName(topName, "Top Player");
+        this.ffaBottomName = sanitizeName(bottomName, "Bottom Player");
+
+        resetCommonState();
+
+        ffaLeftScore = 0;
+        ffaRightScore = 0;
+        ffaTopScore = 0;
+        ffaBottomScore = 0;
+
+        // paddles initial positions
         leftPaddleY = 0;
         rightPaddleY = 0;
 
-        // reset key state
-        wPressed = sPressed = upPressed = downPressed = false;
-
-        // reset meta
-        puckSpeedMultiplier = 1.0;
-        if (vsAi) {
-            playerScore = 0;
-            playerLives = 3;
-            level = 1;
-        }
-
-        // center puck and start countdown for first serve
-        startRoundCountdown(Math.random() < 0.5 ? -1 : 1);
-
-        // background music (no double-start issue)
-        SoundManager.getInstance().playGameMusicLoop();
+        topPaddleX = 0;
+        topPaddleY = WORLD_TOP - 40;
+        bottomPaddleX = 0;
+        bottomPaddleY = WORLD_BOTTOM + 40;
     }
 
     public void endCurrentGame() {
@@ -149,12 +258,19 @@ public class GameWorld {
         leftScore = 0;
         rightScore = 0;
 
+        ffaLeftScore = ffaRightScore = ffaTopScore = ffaBottomScore = 0;
+
         playerScore = 0;
         playerLives = 3;
         level = 1;
 
         leftPaddleY = 0;
         rightPaddleY = 0;
+        leftPaddle2Y = -120;
+        rightPaddle2Y = 120;
+
+        topPaddleX = 0;
+        bottomPaddleX = 0;
 
         puckX = 0;
         puckY = 0;
@@ -164,6 +280,8 @@ public class GameWorld {
         roundStarting = false;
         roundFramesRemaining = 0;
         puckSpeedMultiplier = 1.0;
+
+        lastHit = LastHit.NONE;
 
         SoundManager.getInstance().stopGameMusic();
     }
@@ -193,6 +311,22 @@ public class GameWorld {
             upPressed = true;
         } else if (code == KeyEvent.VK_DOWN) {
             downPressed = true;
+        } else if (code == KeyEvent.VK_T) {
+            tPressed = true;
+        } else if (code == KeyEvent.VK_G) {
+            gPressed = true;
+        } else if (code == KeyEvent.VK_I) {
+            iPressed = true;
+        } else if (code == KeyEvent.VK_K) {
+            kPressed = true;
+        } else if (code == KeyEvent.VK_A) {
+            aPressed = true;
+        } else if (code == KeyEvent.VK_D) {
+            dPressed = true;
+        } else if (code == KeyEvent.VK_J) {
+            jPressed = true;
+        } else if (code == KeyEvent.VK_L) {
+            lPressed = true;
         }
     }
 
@@ -205,6 +339,22 @@ public class GameWorld {
             upPressed = false;
         } else if (code == KeyEvent.VK_DOWN) {
             downPressed = false;
+        } else if (code == KeyEvent.VK_T) {
+            tPressed = false;
+        } else if (code == KeyEvent.VK_G) {
+            gPressed = false;
+        } else if (code == KeyEvent.VK_I) {
+            iPressed = false;
+        } else if (code == KeyEvent.VK_K) {
+            kPressed = false;
+        } else if (code == KeyEvent.VK_A) {
+            aPressed = false;
+        } else if (code == KeyEvent.VK_D) {
+            dPressed = false;
+        } else if (code == KeyEvent.VK_J) {
+            jPressed = false;
+        } else if (code == KeyEvent.VK_L) {
+            lPressed = false;
         }
     }
 
@@ -242,21 +392,106 @@ public class GameWorld {
 
     // ==================== Internal logic ====================
 
-    private void updatePaddles() {
-        // Left paddle = human (W/S)
-        if (wPressed) leftPaddleY += paddleSpeed;
-        if (sPressed) leftPaddleY -= paddleSpeed;
+    private void resetCommonState() {
+        leftScore = 0;
+        rightScore = 0;
 
-        // Right paddle = either human or AI
-        if (vsAi) {
-            updateAiPaddle();
-        } else {
-            if (upPressed) rightPaddleY += paddleSpeed;
-            if (downPressed) rightPaddleY -= paddleSpeed;
+        paused = false;
+        gameInProgress = true;
+        matchFinished = false;
+
+        leftPaddleY = 0;
+        rightPaddleY = 0;
+        leftPaddle2Y = -120;
+        rightPaddle2Y = 120;
+
+        topPaddleX = 0;
+        bottomPaddleX = 0;
+
+        // reset key state
+        wPressed = sPressed = upPressed = downPressed = false;
+        tPressed = gPressed = iPressed = kPressed = false;
+        aPressed = dPressed = jPressed = lPressed = false;
+
+        // reset meta
+        puckSpeedMultiplier = 1.0;
+        playerScore = 0;
+        playerLives = 3;
+        level = 1;
+
+        // center puck and start countdown for first serve
+        startRoundCountdown(Math.random() < 0.5 ? -1 : 1);
+
+        lastHit = LastHit.NONE;
+
+        // background music (no double-start issue)
+        SoundManager.getInstance().playGameMusicLoop();
+    }
+
+    private String sanitizeName(String name, String fallback) {
+        if (name == null) return fallback;
+        String trimmed = name.trim();
+        return trimmed.isEmpty() ? fallback : trimmed;
+    }
+
+    private void updatePaddles() {
+        switch (gameType) {
+            case VS_AI:
+                if (wPressed) leftPaddleY += paddleSpeed;
+                if (sPressed) leftPaddleY -= paddleSpeed;
+                updateAiPaddle();
+                break;
+
+            case TWO_PLAYERS:
+                if (wPressed) leftPaddleY += paddleSpeed;
+                if (sPressed) leftPaddleY -= paddleSpeed;
+                if (upPressed) rightPaddleY += paddleSpeed;
+                if (downPressed) rightPaddleY -= paddleSpeed;
+                break;
+
+            case FOUR_PLAYERS_2V2:
+                // left team
+                if (wPressed) leftPaddleY += paddleSpeed;
+                if (sPressed) leftPaddleY -= paddleSpeed;
+                if (tPressed) leftPaddle2Y += paddleSpeed;
+                if (gPressed) leftPaddle2Y -= paddleSpeed;
+
+                // right team
+                if (upPressed) rightPaddleY += paddleSpeed;
+                if (downPressed) rightPaddleY -= paddleSpeed;
+                if (iPressed) rightPaddle2Y += paddleSpeed;
+                if (kPressed) rightPaddle2Y -= paddleSpeed;
+                break;
+
+            case FOUR_PLAYERS_FFA:
+                // left vertical
+                if (wPressed) leftPaddleY += paddleSpeed;
+                if (sPressed) leftPaddleY -= paddleSpeed;
+                // right vertical
+                if (upPressed) rightPaddleY += paddleSpeed;
+                if (downPressed) rightPaddleY -= paddleSpeed;
+                // top horizontal: J = left, L = right
+                if (jPressed) topPaddleX -= paddleSpeed;
+                if (lPressed) topPaddleX += paddleSpeed;
+                // bottom horizontal: A = left, D = right
+                if (aPressed) bottomPaddleX -= paddleSpeed;
+                if (dPressed) bottomPaddleX += paddleSpeed;
+                break;
         }
 
+        // clamp vertical paddles
         leftPaddleY = clamp(leftPaddleY, WORLD_BOTTOM + paddleHalfH, WORLD_TOP - paddleHalfH);
         rightPaddleY = clamp(rightPaddleY, WORLD_BOTTOM + paddleHalfH, WORLD_TOP - paddleHalfH);
+
+        if (gameType == GameType.FOUR_PLAYERS_2V2) {
+            leftPaddle2Y = clamp(leftPaddle2Y, WORLD_BOTTOM + paddleHalfH, WORLD_TOP - paddleHalfH);
+            rightPaddle2Y = clamp(rightPaddle2Y, WORLD_BOTTOM + paddleHalfH, WORLD_TOP - paddleHalfH);
+        }
+
+        if (gameType == GameType.FOUR_PLAYERS_FFA) {
+            topPaddleX = clamp(topPaddleX, WORLD_LEFT + horizontalPaddleHalfW, WORLD_RIGHT - horizontalPaddleHalfW);
+            bottomPaddleX = clamp(bottomPaddleX, WORLD_LEFT + horizontalPaddleHalfW, WORLD_RIGHT - horizontalPaddleHalfW);
+        }
     }
 
     private void updateAiPaddle() {
@@ -304,47 +539,63 @@ public class GameWorld {
 
             rightPaddleY += dir * step + noise;
         }
+
+        rightPaddleY = clamp(rightPaddleY, WORLD_BOTTOM + paddleHalfH, WORLD_TOP - paddleHalfH);
     }
 
     private void updatePuck() {
         puckX += puckVX;
         puckY += puckVY;
 
-        // top / bottom wall collisions
-        if (puckY + puckR > WORLD_TOP) {
-            puckY = WORLD_TOP - puckR;
-            puckVY = -puckVY;
-        } else if (puckY - puckR < WORLD_BOTTOM) {
-            puckY = WORLD_BOTTOM + puckR;
-            puckVY = -puckVY;
+        // For free-for-all mode, top/bottom are goals, so no bounce on them
+        if (gameType != GameType.FOUR_PLAYERS_FFA) {
+            if (puckY + puckR > WORLD_TOP) {
+                puckY = WORLD_TOP - puckR;
+                puckVY = -puckVY;
+            } else if (puckY - puckR < WORLD_BOTTOM) {
+                puckY = WORLD_BOTTOM + puckR;
+                puckVY = -puckVY;
+            }
         }
 
         checkPaddleCollision();
 
-        // goals
+        // Left/right goals (all modes)
         if (puckX - puckR < WORLD_LEFT) {
-            // AI scores on left goal
-            if (vsAi) {
+            if (gameType == GameType.FOUR_PLAYERS_FFA) {
+                handleFreeForAllGoal(Side.LEFT);
+            } else if (vsAi) {
                 handleAiGoal();
             } else {
                 rightScore++;
-                boolean someoneWon = checkWinTwoPlayer();
+                boolean someoneWon = checkWinTwoPlayerOrTeam();
                 if (!someoneWon) {
-                    // serve towards right player (positive X) or whoever conceded
                     startRoundCountdown(-1);
                 }
             }
+            return;
         } else if (puckX + puckR > WORLD_RIGHT) {
-            // Left (human) scores on right goal
-            if (vsAi) {
+            if (gameType == GameType.FOUR_PLAYERS_FFA) {
+                handleFreeForAllGoal(Side.RIGHT);
+            } else if (vsAi) {
                 handlePlayerGoal();
             } else {
                 leftScore++;
-                boolean someoneWon = checkWinTwoPlayer();
+                boolean someoneWon = checkWinTwoPlayerOrTeam();
                 if (!someoneWon) {
-                    // serve towards left player (negative X) or whoever conceded
                     startRoundCountdown(1);
                 }
+            }
+            return;
+        }
+
+        // Top / bottom goals only in free-for-all
+        if (gameType == GameType.FOUR_PLAYERS_FFA) {
+            if (puckY + puckR > WORLD_TOP) {
+                handleFreeForAllGoal(Side.TOP);
+                return;
+            } else if (puckY - puckR < WORLD_BOTTOM) {
+                handleFreeForAllGoal(Side.BOTTOM);
             }
         }
     }
@@ -360,6 +611,8 @@ public class GameWorld {
         puckY = 0;
         puckVX = 0;
         puckVY = 0;
+
+        lastHit = LastHit.NONE;
     }
 
     // actually launch the puck after countdown
@@ -414,52 +667,152 @@ public class GameWorld {
         }
     }
 
-    private void checkPaddleCollision() {
-        double lpLeft = leftPaddleX - paddleHalfW;
-        double lpRight = leftPaddleX + paddleHalfW;
-        double lpTop = leftPaddleY + paddleHalfH;
-        double lpBottom = leftPaddleY - paddleHalfH;
-
-        double rpLeft = rightPaddleX - paddleHalfW;
-        double rpRight = rightPaddleX + paddleHalfW;
-        double rpTop = rightPaddleY + paddleHalfH;
-        double rpBottom = rightPaddleY - paddleHalfH;
-
-        // left paddle
-        if (puckX - puckR < lpRight && puckX + puckR > lpLeft &&
-                puckY + puckR > lpBottom && puckY - puckR < lpTop &&
-                puckVX < 0) {
-
-            puckX = lpRight + puckR;
-            puckVX = -puckVX;
-
-            double offset = puckY - leftPaddleY;
-            puckVY += offset * 0.1;
-
-            SoundManager.getInstance().playHit();
+    private void handleFreeForAllGoal(Side side) {
+        // award a point to the player who last hit the puck
+        switch (lastHit) {
+            case LEFT_MAIN:
+            case LEFT_SECOND:
+                if (side != Side.LEFT) {
+                    ffaLeftScore++;
+                }
+                break;
+            case RIGHT_MAIN:
+            case RIGHT_SECOND:
+                if (side != Side.RIGHT) {
+                    ffaRightScore++;
+                }
+                break;
+            case TOP:
+                if (side != Side.TOP) {
+                    ffaTopScore++;
+                }
+                break;
+            case BOTTOM:
+                if (side != Side.BOTTOM) {
+                    ffaBottomScore++;
+                }
+                break;
+            default:
+                // nobody touched it recently, no score
+                break;
         }
 
-        // right paddle
-        if (puckX + puckR > rpLeft && puckX - puckR < rpRight &&
-                puckY + puckR > rpBottom && puckY - puckR < rpTop &&
-                puckVX > 0) {
+        SoundManager.getInstance().playHit();
 
-            puckX = rpLeft - puckR;
-            puckVX = -puckVX;
+        // reset puck to center with random direction
+        startRoundCountdown(Math.random() < 0.5 ? -1 : 1);
 
-            double offset = puckY - rightPaddleY;
+        checkWinFreeForAll();
+    }
+
+    private void checkPaddleCollision() {
+        // main left paddle
+        checkVerticalPaddleCollision(leftPaddleX, leftPaddleY,
+                paddleHalfW, paddleHalfH, true, LastHit.LEFT_MAIN);
+
+        // second left paddle for 2v2
+        if (gameType == GameType.FOUR_PLAYERS_2V2) {
+            checkVerticalPaddleCollision(leftPaddleX, leftPaddle2Y,
+                    paddleHalfW, paddleHalfH, true, LastHit.LEFT_SECOND);
+        }
+
+        // main right paddle (used in all modes)
+        checkVerticalPaddleCollision(rightPaddleX, rightPaddleY,
+                paddleHalfW, paddleHalfH, false, LastHit.RIGHT_MAIN);
+
+        // second right paddle for 2v2
+        if (gameType == GameType.FOUR_PLAYERS_2V2) {
+            checkVerticalPaddleCollision(rightPaddleX, rightPaddle2Y,
+                    paddleHalfW, paddleHalfH, false, LastHit.RIGHT_SECOND);
+        }
+
+        // horizontal paddles only in free-for-all
+        if (gameType == GameType.FOUR_PLAYERS_FFA) {
+            checkHorizontalPaddleCollision(topPaddleX, topPaddleY,
+                    horizontalPaddleHalfW, horizontalPaddleHalfH, true, LastHit.TOP);
+            checkHorizontalPaddleCollision(bottomPaddleX, bottomPaddleY,
+                    horizontalPaddleHalfW, horizontalPaddleHalfH, false, LastHit.BOTTOM);
+        }
+    }
+
+    private void checkVerticalPaddleCollision(double px, double py,
+                                              double halfW, double halfH,
+                                              boolean isLeftSide,
+                                              LastHit hit) {
+        double pLeft = px - halfW;
+        double pRight = px + halfW;
+        double pTop = py + halfH;
+        double pBottom = py - halfH;
+
+        if (puckX + puckR > pLeft && puckX - puckR < pRight &&
+                puckY + puckR > pBottom && puckY - puckR < pTop) {
+
+            if (isLeftSide && puckVX < 0) {
+                puckX = pRight + puckR;
+                puckVX = -puckVX;
+            } else if (!isLeftSide && puckVX > 0) {
+                puckX = pLeft - puckR;
+                puckVX = -puckVX;
+            } else {
+                return;
+            }
+
+            double offset = puckY - py;
             puckVY += offset * 0.1;
 
+            lastHit = hit;
             SoundManager.getInstance().playHit();
         }
     }
 
-    private boolean checkWinTwoPlayer() {
-        if (vsAi) return false; // single-player uses lives/levels instead
+    private void checkHorizontalPaddleCollision(double px, double py,
+                                                double halfW, double halfH,
+                                                boolean isTop,
+                                                LastHit hit) {
+        double pLeft = px - halfW;
+        double pRight = px + halfW;
+        double pTop = py + halfH;
+        double pBottom = py - halfH;
+
+        if (puckX + puckR > pLeft && puckX - puckR < pRight &&
+                puckY + puckR > pBottom && puckY - puckR < pTop) {
+
+            if (isTop && puckVY > 0) {
+                // moving up, hit bottom of top paddle
+                puckY = pBottom - puckR;
+                puckVY = -puckVY;
+            } else if (!isTop && puckVY < 0) {
+                // moving down, hit top of bottom paddle
+                puckY = pTop + puckR;
+                puckVY = -puckVY;
+            } else {
+                return;
+            }
+
+            double offset = puckX - px;
+            puckVX += offset * 0.1;
+
+            lastHit = hit;
+            SoundManager.getInstance().playHit();
+        }
+    }
+
+    private boolean checkWinTwoPlayerOrTeam() {
+        if (vsAi || gameType == GameType.FOUR_PLAYERS_FFA) return false;
 
         if (leftScore >= winningScore || rightScore >= winningScore) {
-            String winnerName = (leftScore > rightScore) ? leftPlayerName : rightPlayerName;
+            String winnerName;
             int winnerScore = Math.max(leftScore, rightScore);
+
+            if (gameType == GameType.FOUR_PLAYERS_2V2) {
+                if (leftScore > rightScore) {
+                    winnerName = leftTeamP1Name + " & " + leftTeamP2Name;
+                } else {
+                    winnerName = rightTeamP1Name + " & " + rightTeamP2Name;
+                }
+            } else {
+                winnerName = (leftScore > rightScore) ? leftPlayerName : rightPlayerName;
+            }
 
             highScores.addScore(winnerName, winnerScore);
 
@@ -471,6 +824,34 @@ public class GameWorld {
             return true;
         }
         return false;
+    }
+
+    private void checkWinFreeForAll() {
+        if (gameType != GameType.FOUR_PLAYERS_FFA) return;
+
+        int maxScore = Math.max(Math.max(ffaLeftScore, ffaRightScore),
+                Math.max(ffaTopScore, ffaBottomScore));
+
+        if (maxScore >= ffaWinningScore) {
+            String winnerName;
+            if (ffaLeftScore == maxScore) {
+                winnerName = ffaLeftName;
+            } else if (ffaRightScore == maxScore) {
+                winnerName = ffaRightName;
+            } else if (ffaTopScore == maxScore) {
+                winnerName = ffaTopName;
+            } else {
+                winnerName = ffaBottomName;
+            }
+
+            highScores.addScore(winnerName, maxScore);
+
+            gameInProgress = false;
+            paused = true;
+            matchFinished = true;
+
+            SoundManager.getInstance().stopGameMusic();
+        }
     }
 
     // ==================== Drawing helpers ====================
@@ -502,19 +883,90 @@ public class GameWorld {
     }
 
     private void drawPaddles(GL2 gl) {
-        gl.glColor3f(0.1f, 0.5f, 1.0f);
-        fillRect(gl,
-                leftPaddleX - paddleHalfW,
-                leftPaddleY - paddleHalfH,
-                leftPaddleX + paddleHalfW,
-                leftPaddleY + paddleHalfH);
+        switch (gameType) {
+            case TWO_PLAYERS:
+            case VS_AI:
+                gl.glColor3f(0.1f, 0.5f, 1.0f);
+                fillRect(gl,
+                        leftPaddleX - paddleHalfW,
+                        leftPaddleY - paddleHalfH,
+                        leftPaddleX + paddleHalfW,
+                        leftPaddleY + paddleHalfH);
 
-        gl.glColor3f(0.1f, 1.0f, 0.4f);
-        fillRect(gl,
-                rightPaddleX - paddleHalfW,
-                rightPaddleY - paddleHalfH,
-                rightPaddleX + paddleHalfW,
-                rightPaddleY + paddleHalfH);
+                gl.glColor3f(0.1f, 1.0f, 0.4f);
+                fillRect(gl,
+                        rightPaddleX - paddleHalfW,
+                        rightPaddleY - paddleHalfH,
+                        rightPaddleX + paddleHalfW,
+                        rightPaddleY + paddleHalfH);
+                break;
+
+            case FOUR_PLAYERS_2V2:
+                // Left team: blue shades
+                gl.glColor3f(0.1f, 0.5f, 1.0f);
+                fillRect(gl,
+                        leftPaddleX - paddleHalfW,
+                        leftPaddleY - paddleHalfH,
+                        leftPaddleX + paddleHalfW,
+                        leftPaddleY + paddleHalfH);
+
+                gl.glColor3f(0.1f, 0.8f, 1.0f);
+                fillRect(gl,
+                        leftPaddleX - paddleHalfW,
+                        leftPaddle2Y - paddleHalfH,
+                        leftPaddleX + paddleHalfW,
+                        leftPaddle2Y + paddleHalfH);
+
+                // Right team: green shades
+                gl.glColor3f(0.1f, 1.0f, 0.4f);
+                fillRect(gl,
+                        rightPaddleX - paddleHalfW,
+                        rightPaddleY - paddleHalfH,
+                        rightPaddleX + paddleHalfW,
+                        rightPaddleY + paddleHalfH);
+
+                gl.glColor3f(0.3f, 1.0f, 0.7f);
+                fillRect(gl,
+                        rightPaddleX - paddleHalfW,
+                        rightPaddle2Y - paddleHalfH,
+                        rightPaddleX + paddleHalfW,
+                        rightPaddle2Y + paddleHalfH);
+                break;
+
+            case FOUR_PLAYERS_FFA:
+                // left vertical (blue)
+                gl.glColor3f(0.1f, 0.5f, 1.0f);
+                fillRect(gl,
+                        leftPaddleX - paddleHalfW,
+                        leftPaddleY - paddleHalfH,
+                        leftPaddleX + paddleHalfW,
+                        leftPaddleY + paddleHalfH);
+
+                // right vertical (green)
+                gl.glColor3f(0.1f, 1.0f, 0.4f);
+                fillRect(gl,
+                        rightPaddleX - paddleHalfW,
+                        rightPaddleY - paddleHalfH,
+                        rightPaddleX + paddleHalfW,
+                        rightPaddleY + paddleHalfH);
+
+                // top horizontal (orange)
+                gl.glColor3f(1.0f, 0.6f, 0.2f);
+                fillRect(gl,
+                        topPaddleX - horizontalPaddleHalfW,
+                        topPaddleY - horizontalPaddleHalfH,
+                        topPaddleX + horizontalPaddleHalfW,
+                        topPaddleY + horizontalPaddleHalfH);
+
+                // bottom horizontal (purple)
+                gl.glColor3f(0.7f, 0.3f, 1.0f);
+                fillRect(gl,
+                        bottomPaddleX - horizontalPaddleHalfW,
+                        bottomPaddleY - horizontalPaddleHalfH,
+                        bottomPaddleX + horizontalPaddleHalfW,
+                        bottomPaddleY + horizontalPaddleHalfH);
+                break;
+        }
     }
 
     private void drawPuck(GL2 gl) {
@@ -527,32 +979,49 @@ public class GameWorld {
 
         textRenderer.beginRendering(windowWidth, windowHeight);
 
-        // Top HUD line
         textRenderer.setColor(1f, 1f, 1f, 1f);
-        String topLine;
 
-        if (vsAi) {
-            topLine = leftPlayerName + " (You): " + leftScore +
+        String topLine1;
+        String topLine2 = null;
+        String bottomLine;
+
+        if (gameType == GameType.FOUR_PLAYERS_2V2) {
+            topLine1 = "Left Team (" + leftTeamP1Name + " & " + leftTeamP2Name + "): " + leftScore +
+                    "   Right Team (" + rightTeamP1Name + " & " + rightTeamP2Name + "): " + rightScore;
+
+            bottomLine = "Left: P1=W/S, P2=T/G  ·  Right: P1=Up/Down, P2=I/K  ·  P: Pause  ·  ESC: Menu";
+        } else if (gameType == GameType.FOUR_PLAYERS_FFA) {
+            topLine1 = ffaLeftName + ": " + ffaLeftScore +
+                    "   " + ffaRightName + ": " + ffaRightScore;
+            topLine2 = ffaTopName + ": " + ffaTopScore +
+                    "   " + ffaBottomName + ": " + ffaBottomScore;
+
+            bottomLine = "Left=W/S  ·  Right=Up/Down  ·  Top=J/L  ·  Bottom=A/D  ·  P: Pause  ·  ESC: Menu";
+        } else if (vsAi) {
+            topLine1 = leftPlayerName + " (You): " + leftScore +
                     "   AI: " + rightScore +
                     "   Score: " + playerScore +
                     "   Lives: " + playerLives +
                     "   Lv: " + level +
                     " [" + aiDifficulty.name() + "]";
-        } else {
-            topLine = leftPlayerName + ": " + leftScore +
-                    "   " + rightPlayerName + ": " + rightScore;
-        }
-        textRenderer.draw(topLine, 20, windowHeight - 30);
 
-        // Bottom HUD line
-        String bottomLine;
-        if (vsAi) {
             bottomLine = "Controls: W/S move   |   P: Pause   |   ESC: Menu   ·  Beat the AI to level up!";
         } else {
+            topLine1 = leftPlayerName + ": " + leftScore +
+                    "   " + rightPlayerName + ": " + rightScore;
+
             bottomLine = "W/S: " + leftPlayerName +
                     "  |  Up/Down: " + rightPlayerName +
                     "  |  P: Pause  |  ESC: Menu";
         }
+
+        // draw top HUD lines
+        textRenderer.draw(topLine1, 20, windowHeight - 30);
+        if (topLine2 != null) {
+            textRenderer.draw(topLine2, 20, windowHeight - 60);
+        }
+
+        // bottom HUD line
         textRenderer.draw(bottomLine, 20, 20);
 
         // Round-start countdown in center (only while game running and not paused)
@@ -573,6 +1042,8 @@ public class GameWorld {
             int x = windowWidth / 2 - approxWidth / 2;
             int y = windowHeight / 2 + 40;
             textRenderer.draw(label, x, y);
+
+            textRenderer.setColor(1f, 1f, 1f, 1f);
         }
 
         if (paused) {

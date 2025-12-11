@@ -218,8 +218,22 @@ public class AirHockeyGame extends JFrame
     }
 
     @Override
-    public void onNamesConfirmed(String leftName, String rightName) {
+    public void onTwoPlayerNamesConfirmed(String leftName, String rightName) {
         gameWorld.startNewMatch(leftName, rightName); // 2-player
+        currentScreen = Screen.GAME;
+    }
+
+    @Override
+    public void onFourPlayers2v2NamesConfirmed(String left1, String left2,
+                                               String right1, String right2) {
+        gameWorld.startNewMatch2v2(left1, left2, right1, right2);
+        currentScreen = Screen.GAME;
+    }
+
+    @Override
+    public void onFourPlayersFfaNamesConfirmed(String left, String right,
+                                               String top, String bottom) {
+        gameWorld.startNewFreeForAll(left, right, top, bottom);
         currentScreen = Screen.GAME;
     }
 
@@ -312,8 +326,16 @@ public class AirHockeyGame extends JFrame
             SoundManager.getInstance().playClick();
             String action = gameModeScreen.getSelectedAction();
             switch (action) {
-                case "pvp":
-                    playerSetup.reset();
+                case "pvp2":
+                    playerSetup.configureTwoPlayers();
+                    currentScreen = Screen.PLAYER_SETUP;
+                    break;
+                case "pvp4":
+                    playerSetup.configureFourPlayers2v2();
+                    currentScreen = Screen.PLAYER_SETUP;
+                    break;
+                case "ffa4":
+                    playerSetup.configureFourPlayersFfa();
                     currentScreen = Screen.PLAYER_SETUP;
                     break;
                 case "ai":
