@@ -1,19 +1,55 @@
 package com.cs304.airhockey;
 
 import com.jogamp.opengl.util.awt.TextRenderer;
+import java.awt.geom.Rectangle2D;
 
 /**
- * Simple main menu screen for the Air Hockey game.
+ * Main menu screen for the Air Hockey game.
+ * Fancy animated title + animated 3D-ish menu entries.
  */
 public class MainMenuScreen {
 
-    private final String[] items = {
-            "Start Game",
-            "High Scores",
-            "Quit"
-    };
+    private static class Item {
+        String label;
+        String action;
 
+        Item(String label, String action) {
+            this.label = label;
+            this.action = action;
+        }
+    }
+
+    private Item[] items;
     private int selected = 0;
+
+    public MainMenuScreen() {
+        open(false);
+    }
+
+    /**
+     * Configure the menu for either "no active game" or "game in progress".
+     */
+    public void open(boolean canContinue) {
+        if (canContinue) {
+            items = new Item[] {
+                    new Item("Continue Match",  "continue"),
+                    new Item("Play",           "play"),
+                    new Item("Settings",       "settings"),
+                    new Item("Instructions",   "instructions"),
+                    new Item("High Scores",    "highscores"),
+                    new Item("Quit",           "quit")
+            };
+        } else {
+            items = new Item[] {
+                    new Item("Play",           "play"),
+                    new Item("Settings",       "settings"),
+                    new Item("Instructions",   "instructions"),
+                    new Item("High Scores",    "highscores"),
+                    new Item("Quit",           "quit")
+            };
+        }
+        selected = 0;
+    }
 
     public void moveUp() {
         selected--;
@@ -30,32 +66,111 @@ public class MainMenuScreen {
     }
 
     public String getSelectedAction() {
-        switch (selected) {
-            case 0: return "start";
-            case 1: return "highscores";
-            case 2: return "quit";
-            default: return "start";
-        }
+        if (items == null || items.length == 0) return "play";
+        return items[selected].action;
     }
 
     public void draw(TextRenderer r, int w, int h) {
         int centerX = w / 2;
-        int baseY = h / 2 + 40;
 
-        r.setColor(1f, 1f, 1f, 1f);
-        r.draw("CS304 Air Hockey", centerX - 120, h - 80);
+        // global time for animation
+        double t = System.nanoTime() / 1_000_000_000.0;
+        float glow = 0.6f + 0.4f * (float) Math.sin(t * 2.0);   // 0.2 .. 1.0
+        float wobble = (float) Math.sin(t * 3.0) * 4f;          // small up/down wobble
+
+        // ===== TITLE (big, 3D-ish, glowing) =====
+        String title = "CS304 AIR HOCKEY";
+        Rectangle2D tb = r.getBounds(title);
+        int titleX = centerX - (int) (tb.getWidth() / 2);
+        int titleY = h - 130 + (int) wobble;
+
+        // shadow layer (black)
+        r.setColor(0f, 0f, 0f, 0.8f);
+        r.draw(title, titleX + 5, titleY - 5);
+
+        // back layer (dark purple)
+        r.setColor(0.25f, 0.05f, 0.4f, 1f);
+        r.draw(title, titleX + 2, titleY - 2);
+
+        // front layer (animated "neon gold")
+        float rCol = 1.0f;
+        float gCol = 0.85f + 0.15f * glow;
+        float bCol = 0.45f + 0.25f * glow;
+        r.setColor(rCol, gCol, bCol, 1f);
+        r.draw(title, titleX, titleY);
+
+        // little stars around the title for arcade vibe
+        r.setColor(0.8f, 0.9f, 1f, 0.9f);
+        r.draw("★", titleX - 40, titleY + 10);
+        r.draw("★", titleX + (int) tb.getWidth() + 10, titleY + 25);
+
+        // Subtitle
+        String subtitle = "Arcade Ice Battle · Local & Vs AI";
+        Rectangle2D sb = r.getBounds(subtitle);
+        int subX = centerX - (int) (sb.getWidth() / 2);
+        int subY = titleY - 40;
+
+        r.setColor(0f, 0f, 0f, 0.6f);
+        r.draw(subtitle, subX + 3, subY - 3);
+        r.setColor(0.7f, 0.95f, 1f, 1f);
+        r.draw(subtitle, subX, subY);
+
+        // ===== MENU ITEMS (fake 3D "buttons") =====
+        int baseY = h / 2 + 60;
+        int lineSpacing = 48;
 
         for (int i = 0; i < items.length; i++) {
-            if (i == selected) {
-                r.setColor(1f, 1f, 0f, 1f);
+            boolean isSelected = (i == selected);
+
+            // vertical bounce for selected item
+            int yOffset = isSelected ? (int) (Math.sin(t * 5.0) * 4.0) : 0;
+
+            String text = items[i].label;
+            Rectangle2D mb = r.getBounds(text);
+
+            int itemX = centerX - (int) (mb.getWidth() / 2);
+            int itemY = baseY - i * lineSpacing + yOffset;
+
+            if (isSelected) {
+                // left arrow
+                r.setColor(0f, 0f, 0f, 0.8f);
+                r.draw("▶", itemX - 40, itemY - 3);
+
+                // fake glow shadow
+                r.setColor(0f, 0f, 0f, 0.8f);
+                r.draw(text, itemX + 4, itemY - 4);
+
+                // neon border effect
+                r.setColor(0.05f, 0.9f, 0.8f, 1f);
+                r.draw(text, itemX - 1, itemY + 1);
+                r.draw(text, itemX + 1, itemY - 1);
+
+                float cPulse = 0.6f + 0.4f * (float) Math.sin(t * 6.0);
+                r.setColor(0.2f * cPulse, 1.0f, 0.9f, 1f);
+                r.draw(text, itemX, itemY);
             } else {
-                r.setColor(0.7f, 0.7f, 0.7f, 1f);
+                r.setColor(0f, 0f, 0f, 0.6f);
+                r.draw(text, itemX + 3, itemY - 3);
+
+                r.setColor(0.8f, 0.85f, 0.95f, 0.9f);
+                r.draw(text, itemX, itemY);
             }
-            r.draw(items[i], centerX - 60, baseY - i * 30);
         }
 
-        r.setColor(0.6f, 0.6f, 0.6f, 1f);
-        r.draw("Use UP / DOWN to navigate, ENTER to select, ESC to quit",
-               40, 40);
+        // ===== Footer hint with subtle glow =====
+        String footer = "↑ / ↓  move   ·   ENTER select   ·   ESC back / quit";
+        Rectangle2D fb = r.getBounds(footer);
+        int footerX = centerX - (int) (fb.getWidth() / 2);
+
+        float glowFooter = 0.4f + 0.6f * (float) Math.abs(Math.sin(t * 2.0));
+
+        r.setColor(0f, 0f, 0f, 0.7f);
+        r.draw(footer, footerX + 2, 40);
+
+        r.setColor(0.6f + 0.4f * glowFooter,
+                0.8f + 0.2f * glowFooter,
+                1.0f,
+                1f);
+        r.draw(footer, footerX, 44);
     }
 }
