@@ -10,6 +10,13 @@ import com.jogamp.opengl.util.awt.TextRenderer;
  */
 public class GameWorld {
 
+    // Difficulty for AI mode
+    public enum Difficulty {
+        EASY,
+        MEDIUM,
+        HARD
+    }
+
     // ----- World bounds (rink) -----
     private final double WORLD_LEFT = -360;
     private final double WORLD_RIGHT = 360;
@@ -28,7 +35,7 @@ public class GameWorld {
 
     private double paddleSpeed = 6;
 
-    // key state for smooth controls
+    // key state for smooth controls (used for human players)
     private boolean wPressed = false;
     private boolean sPressed = false;
     private boolean upPressed = false;
@@ -49,10 +56,20 @@ public class GameWorld {
     private boolean paused = false;
     private boolean gameInProgress = false;
 
+    // Player labels
     private String leftPlayerName = "Left Player";
     private String rightPlayerName = "Right Player";
 
     private boolean matchFinished = false;
+
+    // ----- Single-player vs AI meta -----
+    private boolean vsAi = false;
+    private Difficulty aiDifficulty = Difficulty.MEDIUM;
+
+    // score/lives/levels only used when vsAi == true
+    private int playerScore = 0;
+    private int playerLives = 3;
+    private int level = 1;
 
     private final HighScoresScreen highScores;
 
@@ -62,7 +79,20 @@ public class GameWorld {
 
     // ==================== Public API ====================
 
+    /**
+     * Start a local 2-player match (no AI).
+     */
     public void startNewMatch(String leftName, String rightName) {
+        startNewMatch(leftName, rightName, false, Difficulty.MEDIUM);
+    }
+
+    /**
+     * Start a new match, with option to play vs AI.
+     */
+    public void startNewMatch(String leftName,
+                              String rightName,
+                              boolean vsAi,
+                              Difficulty difficulty) {
         this.leftPlayerName = (leftName == null || leftName.trim().isEmpty())
                 ? "Left Player"
                 : leftName.trim();
@@ -71,21 +101,32 @@ public class GameWorld {
                 ? "Right Player"
                 : rightName.trim();
 
+        this.vsAi = vsAi;
+        this.aiDifficulty = difficulty;
+
         leftScore = 0;
         rightScore = 0;
         paused = false;
         gameInProgress = true;
         matchFinished = false;
 
+        // reset paddles
         leftPaddleY = 0;
         rightPaddleY = 0;
 
+        // reset key state
         wPressed = sPressed = upPressed = downPressed = false;
+
+        // reset single-player meta
+        if (vsAi) {
+            playerScore = 0;
+            playerLives = 3;
+            level = 1;
+        }
 
         resetPuck(Math.random() < 0.5 ? -1 : 1);
 
-        // background music already started from main window,
-        // but it's safe to call again (it checks if already running).
+        // background music (no double-start issue)
         SoundManager.getInstance().playGameMusicLoop();
     }
 
@@ -96,6 +137,10 @@ public class GameWorld {
 
         leftScore = 0;
         rightScore = 0;
+
+        playerScore = 0;
+        playerLives = 3;
+        level = 1;
 
         leftPaddleY = 0;
         rightPaddleY = 0;
@@ -172,19 +217,74 @@ public class GameWorld {
     // ==================== Internal logic ====================
 
     private void updatePaddles() {
+        // Left paddle = human (W/S)
         if (wPressed) leftPaddleY += paddleSpeed;
         if (sPressed) leftPaddleY -= paddleSpeed;
-        if (upPressed) rightPaddleY += paddleSpeed;
-        if (downPressed) rightPaddleY -= paddleSpeed;
+
+        // Right paddle = either human or AI
+        if (vsAi) {
+            updateAiPaddle();
+        } else {
+            if (upPressed) rightPaddleY += paddleSpeed;
+            if (downPressed) rightPaddleY -= paddleSpeed;
+        }
 
         leftPaddleY = clamp(leftPaddleY, WORLD_BOTTOM + paddleHalfH, WORLD_TOP - paddleHalfH);
         rightPaddleY = clamp(rightPaddleY, WORLD_BOTTOM + paddleHalfH, WORLD_TOP - paddleHalfH);
+    }
+
+    private void updateAiPaddle() {
+        // Simple AI: try to follow puckY with speed based on difficulty + level
+        double targetY = puckY;
+        double dy = targetY - rightPaddleY;
+
+        double baseSpeed;
+        switch (aiDifficulty) {
+            case EASY:
+                baseSpeed = 4.0;
+                break;
+            case MEDIUM:
+                baseSpeed = 7.0;
+                break;
+            case HARD:
+                baseSpeed = 10.0;
+                break;
+            default:
+                baseSpeed = 7.0;
+        }
+
+        // slightly faster each level
+        double aiSpeed = baseSpeed + (level - 1) * 0.8;
+
+        if (Math.abs(dy) > 3) {
+            double step = Math.min(Math.abs(dy), aiSpeed);
+            double dir = Math.signum(dy);
+
+            double noiseFactor;
+            switch (aiDifficulty) {
+                case EASY:
+                    noiseFactor = 0.6;
+                    break;
+                case MEDIUM:
+                    noiseFactor = 0.3;
+                    break;
+                case HARD:
+                    noiseFactor = 0.1;
+                    break;
+                default:
+                    noiseFactor = 0.3;
+            }
+            double noise = (Math.random() - 0.5) * noiseFactor * 6.0;
+
+            rightPaddleY += dir * step + noise;
+        }
     }
 
     private void updatePuck() {
         puckX += puckVX;
         puckY += puckVY;
 
+        // top / bottom wall collisions
         if (puckY + puckR > WORLD_TOP) {
             puckY = WORLD_TOP - puckR;
             puckVY = -puckVY;
@@ -195,14 +295,25 @@ public class GameWorld {
 
         checkPaddleCollision();
 
+        // goals
         if (puckX - puckR < WORLD_LEFT) {
-            rightScore++;
-            resetPuck(-1);
-            checkWin();
+            // AI scores on left goal
+            if (vsAi) {
+                handleAiGoal();
+            } else {
+                rightScore++;
+                resetPuck(-1);
+                checkWinTwoPlayer();
+            }
         } else if (puckX + puckR > WORLD_RIGHT) {
-            leftScore++;
-            resetPuck(1);
-            checkWin();
+            // Left (human) scores on right goal
+            if (vsAi) {
+                handlePlayerGoal();
+            } else {
+                leftScore++;
+                resetPuck(1);
+                checkWinTwoPlayer();
+            }
         }
     }
 
@@ -212,6 +323,48 @@ public class GameWorld {
         double randomY = (Math.random() - 0.5) * 6;
         puckVX = 6 * directionToRight;
         puckVY = randomY;
+    }
+
+    private void handlePlayerGoal() {
+        leftScore++;
+        playerScore += 100 * level;
+
+        // hit sound gives feedback
+        SoundManager.getInstance().playHit();
+
+        if (leftScore >= winningScore) {
+            // Level up!
+            level++;
+            leftScore = 0;
+            rightScore = 0;
+
+            // Slightly faster puck as level rises
+            puckVX *= 1.05;
+            puckVY *= 1.05;
+        }
+
+        // next serve from center towards AI
+        resetPuck(-1);
+    }
+
+    private void handleAiGoal() {
+        rightScore++;
+        playerLives--;
+
+        if (playerLives <= 0) {
+            // Game over for player
+            gameInProgress = false;
+            paused = true;
+            matchFinished = true;
+
+            // record high score for player
+            highScores.addScore(leftPlayerName, playerScore);
+
+            SoundManager.getInstance().stopGameMusic();
+        } else {
+            // serve towards player again
+            resetPuck(1);
+        }
     }
 
     private void checkPaddleCollision() {
@@ -236,7 +389,6 @@ public class GameWorld {
             double offset = puckY - leftPaddleY;
             puckVY += offset * 0.1;
 
-            // 🔊 play hit sound
             SoundManager.getInstance().playHit();
         }
 
@@ -251,12 +403,13 @@ public class GameWorld {
             double offset = puckY - rightPaddleY;
             puckVY += offset * 0.1;
 
-            // 🔊 play hit sound
             SoundManager.getInstance().playHit();
         }
     }
 
-    private void checkWin() {
+    private void checkWinTwoPlayer() {
+        if (vsAi) return; // single-player uses lives/levels instead
+
         if (leftScore >= winningScore || rightScore >= winningScore) {
             String winnerName = (leftScore > rightScore) ? leftPlayerName : rightPlayerName;
             int winnerScore = Math.max(leftScore, rightScore);
@@ -324,20 +477,38 @@ public class GameWorld {
         if (textRenderer == null) return;
 
         textRenderer.beginRendering(windowWidth, windowHeight);
+
+        // Top HUD line
         textRenderer.setColor(1f, 1f, 1f, 1f);
+        String topLine;
 
-        String scoreText = leftPlayerName + ": " + leftScore +
-                "   " + rightPlayerName + ": " + rightScore;
-        textRenderer.draw(scoreText, 20, windowHeight - 30);
+        if (vsAi) {
+            topLine = leftPlayerName + " (You): " + leftScore +
+                    "   AI: " + rightScore +
+                    "   Score: " + playerScore +
+                    "   Lives: " + playerLives +
+                    "   Lv: " + level +
+                    " [" + aiDifficulty.name() + "]";
+        } else {
+            topLine = leftPlayerName + ": " + leftScore +
+                    "   " + rightPlayerName + ": " + rightScore;
+        }
+        textRenderer.draw(topLine, 20, windowHeight - 30);
 
-        String pauseText = "W/S: " + leftPlayerName +
-                "  |  Up/Down: " + rightPlayerName +
-                "  |  P: Pause  |  ESC: Menu";
-        textRenderer.draw(pauseText, 20, 20);
+        // Bottom HUD line
+        String bottomLine;
+        if (vsAi) {
+            bottomLine = "Controls: W/S move   |   P: Pause   |   ESC: Menu   ·  Beat the AI to level up!";
+        } else {
+            bottomLine = "W/S: " + leftPlayerName +
+                    "  |  Up/Down: " + rightPlayerName +
+                    "  |  P: Pause  |  ESC: Menu";
+        }
+        textRenderer.draw(bottomLine, 20, 20);
 
         if (paused) {
             textRenderer.setColor(1f, 1f, 0f, 1f);
-            textRenderer.draw("PAUSED", windowWidth / 2 - 50, windowHeight / 2);
+            textRenderer.draw("PAUSED", windowWidth / 2 - 70, windowHeight / 2);
         }
 
         textRenderer.endRendering();

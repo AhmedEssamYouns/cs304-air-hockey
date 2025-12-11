@@ -30,6 +30,8 @@ public class AirHockeyGame extends JFrame
     // ----- Screens -----
     private enum Screen {
         MAIN_MENU,
+        MODE_SELECT,
+        AI_DIFFICULTY,
         PLAYER_SETUP,
         GAME,
         HIGH_SCORES,
@@ -40,6 +42,8 @@ public class AirHockeyGame extends JFrame
     private Screen currentScreen = Screen.MAIN_MENU;
 
     private final MainMenuScreen mainMenu;
+    private final GameModeScreen gameModeScreen;
+    private final AiDifficultyScreen aiDifficultyScreen;
     private final HighScoresScreen highScores;
     private final InstructionsScreen instructions;
     private final GameWorld gameWorld;
@@ -60,6 +64,8 @@ public class AirHockeyGame extends JFrame
         setLayout(new BorderLayout());
 
         mainMenu = new MainMenuScreen();
+        gameModeScreen = new GameModeScreen();
+        aiDifficultyScreen = new AiDifficultyScreen();
         highScores = new HighScoresScreen();
         instructions = new InstructionsScreen();
         gameWorld = new GameWorld(highScores);
@@ -103,10 +109,9 @@ public class AirHockeyGame extends JFrame
         gl.glMatrixMode(GL2.GL_MODELVIEW);
         gl.glLoadIdentity();
 
-        // 🔠 MUCH bigger UI font for all screens
+        // 🔠 big UI font for all screens
         textRenderer = new TextRenderer(new Font("SansSerif", Font.BOLD, 32), true, true);
     }
-
 
     @Override
     public void display(GLAutoDrawable drawable) {
@@ -120,6 +125,22 @@ public class AirHockeyGame extends JFrame
                 if (textRenderer == null) return;
                 textRenderer.beginRendering(windowWidth, windowHeight);
                 mainMenu.draw(textRenderer, windowWidth, windowHeight);
+                textRenderer.endRendering();
+                break;
+
+            case MODE_SELECT:
+                drawGenericSoftBackground(gl);
+                if (textRenderer == null) return;
+                textRenderer.beginRendering(windowWidth, windowHeight);
+                gameModeScreen.draw(textRenderer, windowWidth, windowHeight);
+                textRenderer.endRendering();
+                break;
+
+            case AI_DIFFICULTY:
+                drawGenericSoftBackground(gl);
+                if (textRenderer == null) return;
+                textRenderer.beginRendering(windowWidth, windowHeight);
+                aiDifficultyScreen.draw(textRenderer, windowWidth, windowHeight);
                 textRenderer.endRendering();
                 break;
 
@@ -186,7 +207,6 @@ public class AirHockeyGame extends JFrame
         if (animator != null && animator.isStarted()) {
             animator.stop();
         }
-        // make sure sound stops when app closes
         SoundManager.getInstance().stopGameMusic();
     }
 
@@ -194,13 +214,12 @@ public class AirHockeyGame extends JFrame
 
     @Override
     public void onCancel() {
-        currentScreen = Screen.MAIN_MENU;
-        mainMenu.open(gameWorld.isGameInProgress());
+        currentScreen = Screen.MODE_SELECT; // back to mode select instead of main
     }
 
     @Override
     public void onNamesConfirmed(String leftName, String rightName) {
-        gameWorld.startNewMatch(leftName, rightName);
+        gameWorld.startNewMatch(leftName, rightName); // 2-player
         currentScreen = Screen.GAME;
     }
 
@@ -213,6 +232,12 @@ public class AirHockeyGame extends JFrame
         switch (currentScreen) {
             case MAIN_MENU:
                 handleMenuKeys(code);
+                break;
+            case MODE_SELECT:
+                handleModeSelectKeys(code);
+                break;
+            case AI_DIFFICULTY:
+                handleAiDifficultyKeys(code);
                 break;
             case PLAYER_SETUP:
                 playerSetup.handleKeyPressed(code);
@@ -243,20 +268,15 @@ public class AirHockeyGame extends JFrame
             SoundManager.getInstance().playClick();
             String action = mainMenu.getSelectedAction();
             switch (action) {
-                case "start":
-                    playerSetup.reset();
-                    currentScreen = Screen.PLAYER_SETUP;
+                case "play":
+                    gameModeScreen.reset();
+                    currentScreen = Screen.MODE_SELECT;
                     break;
                 case "continue":
                     if (gameWorld.isGameInProgress()) {
                         gameWorld.setPaused(false);
                         currentScreen = Screen.GAME;
                     }
-                    break;
-                case "endgame":
-                    gameWorld.endCurrentGame();
-                    mainMenu.open(false);
-                    currentScreen = Screen.MAIN_MENU;
                     break;
                 case "settings":
                     currentScreen = Screen.SETTINGS;
@@ -278,6 +298,66 @@ public class AirHockeyGame extends JFrame
             } else {
                 System.exit(0);
             }
+        }
+    }
+
+    private void handleModeSelectKeys(int code) {
+        if (code == KeyEvent.VK_UP) {
+            gameModeScreen.moveUp();
+            SoundManager.getInstance().playClick();
+        } else if (code == KeyEvent.VK_DOWN) {
+            gameModeScreen.moveDown();
+            SoundManager.getInstance().playClick();
+        } else if (code == KeyEvent.VK_ENTER) {
+            SoundManager.getInstance().playClick();
+            String action = gameModeScreen.getSelectedAction();
+            switch (action) {
+                case "pvp":
+                    playerSetup.reset();
+                    currentScreen = Screen.PLAYER_SETUP;
+                    break;
+                case "ai":
+                    aiDifficultyScreen.reset();
+                    currentScreen = Screen.AI_DIFFICULTY;
+                    break;
+                case "back":
+                    currentScreen = Screen.MAIN_MENU;
+                    break;
+            }
+        } else if (code == KeyEvent.VK_ESCAPE) {
+            currentScreen = Screen.MAIN_MENU;
+        }
+    }
+
+    private void handleAiDifficultyKeys(int code) {
+        if (code == KeyEvent.VK_UP) {
+            aiDifficultyScreen.moveUp();
+            SoundManager.getInstance().playClick();
+        } else if (code == KeyEvent.VK_DOWN) {
+            aiDifficultyScreen.moveDown();
+            SoundManager.getInstance().playClick();
+        } else if (code == KeyEvent.VK_ENTER) {
+            SoundManager.getInstance().playClick();
+            String action = aiDifficultyScreen.getSelectedAction();
+            switch (action) {
+                case "easy":
+                    gameWorld.startNewMatch("Player 1", "AI (Easy)", true, GameWorld.Difficulty.EASY);
+                    currentScreen = Screen.GAME;
+                    break;
+                case "medium":
+                    gameWorld.startNewMatch("Player 1", "AI (Medium)", true, GameWorld.Difficulty.MEDIUM);
+                    currentScreen = Screen.GAME;
+                    break;
+                case "hard":
+                    gameWorld.startNewMatch("Player 1", "AI (Hard)", true, GameWorld.Difficulty.HARD);
+                    currentScreen = Screen.GAME;
+                    break;
+                case "back":
+                    currentScreen = Screen.MODE_SELECT;
+                    break;
+            }
+        } else if (code == KeyEvent.VK_ESCAPE) {
+            currentScreen = Screen.MODE_SELECT;
         }
     }
 
@@ -312,7 +392,6 @@ public class AirHockeyGame extends JFrame
             SoundManager.getInstance().playClick();
             boolean enabled = SoundManager.getInstance().toggleSoundEnabled();
             if (enabled) {
-                // Re-start music regardless of gameInProgress
                 SoundManager.getInstance().playGameMusicLoop();
             }
         } else if (code == KeyEvent.VK_ESCAPE) {

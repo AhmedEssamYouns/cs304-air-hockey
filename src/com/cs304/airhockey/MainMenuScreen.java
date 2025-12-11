@@ -32,21 +32,20 @@ public class MainMenuScreen {
     public void open(boolean canContinue) {
         if (canContinue) {
             items = new Item[] {
-                    new Item("Continue Match",     "continue"),
-                    new Item("Start New Game",    "start"),
-                    new Item("End Current Game",  "endgame"),
-                    new Item("Settings",          "settings"),
-                    new Item("Instructions",      "instructions"),
-                    new Item("High Scores",       "highscores"),
-                    new Item("Quit",              "quit")
+                    new Item("Continue Match",  "continue"),
+                    new Item("Play",           "play"),
+                    new Item("Settings",       "settings"),
+                    new Item("Instructions",   "instructions"),
+                    new Item("High Scores",    "highscores"),
+                    new Item("Quit",           "quit")
             };
         } else {
             items = new Item[] {
-                    new Item("Start Game",        "start"),
-                    new Item("Settings",          "settings"),
-                    new Item("Instructions",      "instructions"),
-                    new Item("High Scores",       "highscores"),
-                    new Item("Quit",              "quit")
+                    new Item("Play",           "play"),
+                    new Item("Settings",       "settings"),
+                    new Item("Instructions",   "instructions"),
+                    new Item("High Scores",    "highscores"),
+                    new Item("Quit",           "quit")
             };
         }
         selected = 0;
@@ -67,7 +66,7 @@ public class MainMenuScreen {
     }
 
     public String getSelectedAction() {
-        if (items == null || items.length == 0) return "start";
+        if (items == null || items.length == 0) return "play";
         return items[selected].action;
     }
 
@@ -106,7 +105,7 @@ public class MainMenuScreen {
         r.draw("★", titleX + (int) tb.getWidth() + 10, titleY + 25);
 
         // Subtitle
-        String subtitle = "2-Player Arcade · Best of 5 Goals";
+        String subtitle = "Arcade Ice Battle · Local & Vs AI";
         Rectangle2D sb = r.getBounds(subtitle);
         int subX = centerX - (int) (sb.getWidth() / 2);
         int subY = titleY - 40;
@@ -117,7 +116,7 @@ public class MainMenuScreen {
         r.draw(subtitle, subX, subY);
 
         // ===== MENU ITEMS (fake 3D "buttons") =====
-        int baseY = h / 2 + 50;
+        int baseY = h / 2 + 60;
         int lineSpacing = 48;
 
         for (int i = 0; i < items.length; i++) {
@@ -133,8 +132,7 @@ public class MainMenuScreen {
             int itemY = baseY - i * lineSpacing + yOffset;
 
             if (isSelected) {
-                // background "button" suggestion using text shadows
-                // left "pill"
+                // left arrow
                 r.setColor(0f, 0f, 0f, 0.8f);
                 r.draw("▶", itemX - 40, itemY - 3);
 
@@ -142,7 +140,7 @@ public class MainMenuScreen {
                 r.setColor(0f, 0f, 0f, 0.8f);
                 r.draw(text, itemX + 4, itemY - 4);
 
-                // neon border effect: draw same text multiple times
+                // neon border effect
                 r.setColor(0.05f, 0.9f, 0.8f, 1f);
                 r.draw(text, itemX - 1, itemY + 1);
                 r.draw(text, itemX + 1, itemY - 1);
