@@ -4,6 +4,8 @@ import java.awt.BorderLayout;
 import java.awt.Font;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+import java.io.File;
+import java.io.IOException;
 
 import javax.swing.JFrame;
 
@@ -16,6 +18,9 @@ import com.jogamp.opengl.GLProfile;
 import com.jogamp.opengl.awt.GLCanvas;
 import com.jogamp.opengl.util.FPSAnimator;
 import com.jogamp.opengl.util.awt.TextRenderer;
+import com.jogamp.opengl.util.texture.Texture;
+import com.jogamp.opengl.util.texture.TextureIO;
+import com.jogamp.opengl.util.texture.TextureCoords;
 
 /**
  * Main window and screen controller for the game.
@@ -26,6 +31,15 @@ public class AirHockeyGame extends JFrame
     private GLCanvas canvas;
     private FPSAnimator animator;
     private TextRenderer textRenderer;
+
+    // Background texture for main menu
+    private Texture menuBgTexture;
+    private static final String MENU_BG_PATH =
+            "/imgs/menu_bg.png";
+
+    // Simple flags for logging
+    private boolean menuBgLoadedOk = false;
+    private boolean menuBgAppliedOnce = false;
 
     // ----- Screens -----
     private enum Screen {
@@ -111,12 +125,32 @@ public class AirHockeyGame extends JFrame
 
         // 🔠 big UI font for all screens
         textRenderer = new TextRenderer(new Font("SansSerif", Font.BOLD, 32), true, true);
+
+        // 🔹 Load main menu background texture with logging
+        System.out.println("[MenuBG] init() - trying to load menu background from: " + MENU_BG_PATH);
+        try {
+            File file = new File(MENU_BG_PATH);
+            if (file.exists()) {
+                menuBgTexture = TextureIO.newTexture(file, true);
+                menuBgTexture.setTexParameteri(gl, GL2.GL_TEXTURE_MIN_FILTER, GL2.GL_LINEAR);
+                menuBgTexture.setTexParameteri(gl, GL2.GL_TEXTURE_MAG_FILTER, GL2.GL_LINEAR);
+
+                menuBgLoadedOk = true;
+                System.out.println("[MenuBG] Loaded OK. Texture size: "
+                        + menuBgTexture.getWidth() + "x" + menuBgTexture.getHeight());
+            } else {
+                System.err.println("[MenuBG] File not found at: " + MENU_BG_PATH);
+            }
+        } catch (IOException ex) {
+            System.err.println("[MenuBG] Failed to load texture: " + ex.getMessage());
+            ex.printStackTrace();
+        }
     }
 
     @Override
     public void display(GLAutoDrawable drawable) {
         GL2 gl = drawable.getGL().getGL2();
-        gl.glClear(GL.GL_COLOR_BUFFER_BIT);
+        gl.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT);
         gl.glLoadIdentity();
 
         switch (currentScreen) {
@@ -208,6 +242,14 @@ public class AirHockeyGame extends JFrame
             animator.stop();
         }
         SoundManager.getInstance().stopGameMusic();
+
+        // Optional: free texture resources
+        if (menuBgTexture != null) {
+            GL2 gl = drawable.getGL().getGL2();
+            System.out.println("[MenuBG] Disposing texture resources.");
+            menuBgTexture.destroy(gl);
+            menuBgTexture = null;
+        }
     }
 
     // ==================== PlayerSetupScreen.Listener ====================
@@ -439,11 +481,70 @@ public class AirHockeyGame extends JFrame
     // ==================== Background helpers ====================
 
     private void drawMenuBackground(GL2 gl) {
-        drawVerticalGradient(gl,
-                0.05f, 0.08f, 0.20f,  // top: deep blue
-                0.02f, 0.02f, 0.05f   // bottom: almost black
-        );
+        if (menuBgTexture != null) {
+            if (!menuBgAppliedOnce) {
+                System.out.println("[MenuBG] Using textured background for MAIN_MENU (simple path).");
+                menuBgAppliedOnce = true;
+            }
+
+            // Make sure nothing interferes
+            gl.glDisable(GL2.GL_LIGHTING);
+            gl.glDisable(GL2.GL_DEPTH_TEST);
+            gl.glDisable(GL2.GL_CULL_FACE);
+
+            // Enable texture & blending (for PNG alpha)
+            gl.glEnable(GL2.GL_TEXTURE_2D);
+            gl.glEnable(GL2.GL_BLEND);
+            gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
+
+            // Ensure we are in the same projection we set in init/reshape
+            gl.glMatrixMode(GL2.GL_MODELVIEW);
+            gl.glLoadIdentity();
+
+            // Use JOGL's texture coords (handles NPOT correctly)
+            com.jogamp.opengl.util.texture.TextureCoords tc = menuBgTexture.getImageTexCoords();
+            menuBgTexture.bind(gl);
+
+            // If you want to see clearly if the quad is drawn, you can also log once:
+            // System.out.println("[MenuBG] Drawing textured quad...");
+
+            gl.glBegin(GL2.GL_QUADS);
+
+            // bottom-left
+            gl.glTexCoord2f(tc.left(), tc.bottom());
+            gl.glVertex2d(-380, -240);
+
+            // bottom-right
+            gl.glTexCoord2f(tc.right(), tc.bottom());
+            gl.glVertex2d(380, -240);
+
+            // top-right
+            gl.glTexCoord2f(tc.right(), tc.top());
+            gl.glVertex2d(380, 240);
+
+            // top-left
+            gl.glTexCoord2f(tc.left(), tc.top());
+            gl.glVertex2d(-380, 240);
+
+            gl.glEnd();
+
+            gl.glDisable(GL2.GL_BLEND);
+            gl.glDisable(GL2.GL_TEXTURE_2D);
+        } else {
+            // Only log once that we're falling back
+            if (!menuBgLoadedOk) {
+                System.out.println("[MenuBG] No texture available at runtime, using gradient background.");
+                menuBgLoadedOk = true;
+            }
+
+            // Fallback gradient if texture fails to load
+            drawVerticalGradient(gl,
+                    0.05f, 0.08f, 0.20f,  // top: deep blue
+                    0.02f, 0.02f, 0.05f   // bottom: almost black
+            );
+        }
     }
+
 
     private void drawSettingsBackground(GL2 gl) {
         drawVerticalGradient(gl,
