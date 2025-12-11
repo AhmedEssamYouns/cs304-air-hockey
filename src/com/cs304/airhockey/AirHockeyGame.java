@@ -103,9 +103,10 @@ public class AirHockeyGame extends JFrame
         gl.glMatrixMode(GL2.GL_MODELVIEW);
         gl.glLoadIdentity();
 
-        // 🔠 Bigger, nicer UI font
-        textRenderer = new TextRenderer(new Font("SansSerif", Font.BOLD, 24), true, true);
+        // 🔠 MUCH bigger UI font for all screens
+        textRenderer = new TextRenderer(new Font("SansSerif", Font.BOLD, 32), true, true);
     }
+
 
     @Override
     public void display(GLAutoDrawable drawable) {
