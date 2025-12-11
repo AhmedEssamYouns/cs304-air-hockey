@@ -5,19 +5,14 @@ import java.awt.event.KeyEvent;
 import com.jogamp.opengl.GL2;
 import com.jogamp.opengl.util.awt.TextRenderer;
 
-/**
- * Handles all in-game logic (puck, paddles, scores) and drawing.
- */
+
 public class GameWorld {
 
-    // Difficulty for AI mode
     public enum Difficulty {
-        EASY,
-        MEDIUM,
-        HARD
+        EASY, MEDIUM, HARD
     }
 
-    // ----- World bounds (rink) -----
+    // ----- World bounds -----
     private final double WORLD_LEFT = -360;
     private final double WORLD_RIGHT = 360;
     private final double WORLD_BOTTOM = -220;
@@ -26,16 +21,12 @@ public class GameWorld {
     // ----- Paddles -----
     private double paddleHalfW = 10;
     private double paddleHalfH = 60;
-
     private double leftPaddleX = -320;
     private double leftPaddleY = 0;
-
     private double rightPaddleX = 320;
     private double rightPaddleY = 0;
+    private double paddleSpeed = 10; 
 
-    private double paddleSpeed = 6;
-
-    // key state for smooth controls (used for human players)
     private boolean wPressed = false;
     private boolean sPressed = false;
     private boolean upPressed = false;
@@ -45,9 +36,8 @@ public class GameWorld {
     private double puckX = 0;
     private double puckY = 0;
     private double puckR = 12;
-
-    private double puckVX = 6;
-    private double puckVY = 4;
+    private double puckVX = 8; 
+    private double puckVY = 6; 
 
     // ----- Game state -----
     private int leftScore = 0;
@@ -56,28 +46,22 @@ public class GameWorld {
     private boolean paused = false;
     private boolean gameInProgress = false;
 
-    // Player labels
     private String leftPlayerName = "Left Player";
     private String rightPlayerName = "Right Player";
 
     private boolean matchFinished = false;
 
-    // ----- Single-player vs AI meta -----
     private boolean vsAi = false;
     private Difficulty aiDifficulty = Difficulty.MEDIUM;
-
-    // score/lives/levels only used when vsAi == true
     private int playerScore = 0;
     private int playerLives = 3;
     private int level = 1;
 
-    // ----- Round-start countdown (3..2..1) -----
     private boolean roundStarting = false;
-    private int roundFramesTotal = 180;       // ~3 seconds at 60 FPS
+    private int roundFramesTotal = 180;
     private int roundFramesRemaining = 0;
-    private int nextServeDirection = 1;       // +1 = towards right, -1 = towards left
+    private int nextServeDirection = 1;
 
-    // speed progression for AI mode levels
     private double puckSpeedMultiplier = 1.0;
 
     private final HighScoresScreen highScores;
@@ -86,29 +70,16 @@ public class GameWorld {
         this.highScores = highScores;
     }
 
-    // ==================== Public API ====================
-
-    /**
-     * Start a local 2-player match (no AI).
-     */
     public void startNewMatch(String leftName, String rightName) {
         startNewMatch(leftName, rightName, false, Difficulty.MEDIUM);
     }
 
-    /**
-     * Start a new match, with option to play vs AI.
-     */
     public void startNewMatch(String leftName,
                               String rightName,
                               boolean vsAi,
                               Difficulty difficulty) {
-        this.leftPlayerName = (leftName == null || leftName.trim().isEmpty())
-                ? "Left Player"
-                : leftName.trim();
-
-        this.rightPlayerName = (rightName == null || rightName.trim().isEmpty())
-                ? "Right Player"
-                : rightName.trim();
+        this.leftPlayerName = (leftName == null || leftName.trim().isEmpty()) ? "Left Player" : leftName.trim();
+        this.rightPlayerName = (rightName == null || rightName.trim().isEmpty()) ? "Right Player" : rightName.trim();
 
         this.vsAi = vsAi;
         this.aiDifficulty = difficulty;
@@ -119,25 +90,19 @@ public class GameWorld {
         gameInProgress = true;
         matchFinished = false;
 
-        // reset paddles
         leftPaddleY = 0;
         rightPaddleY = 0;
 
-        // reset key state
         wPressed = sPressed = upPressed = downPressed = false;
-
-        // reset meta
         puckSpeedMultiplier = 1.0;
+
         if (vsAi) {
             playerScore = 0;
             playerLives = 3;
             level = 1;
         }
 
-        // center puck and start countdown for first serve
         startRoundCountdown(Math.random() < 0.5 ? -1 : 1);
-
-        // background music (no double-start issue)
         SoundManager.getInstance().playGameMusicLoop();
     }
 
@@ -145,81 +110,47 @@ public class GameWorld {
         gameInProgress = false;
         paused = false;
         matchFinished = false;
-
-        leftScore = 0;
-        rightScore = 0;
-
+        leftScore = rightScore = 0;
         playerScore = 0;
         playerLives = 3;
         level = 1;
-
         leftPaddleY = 0;
         rightPaddleY = 0;
-
-        puckX = 0;
-        puckY = 0;
-        puckVX = 6;
-        puckVY = 4;
-
+        puckX = puckY = 0;
+        puckVX = 8;
+        puckVY = 6; 
         roundStarting = false;
         roundFramesRemaining = 0;
         puckSpeedMultiplier = 1.0;
-
         SoundManager.getInstance().stopGameMusic();
     }
 
-    public boolean isGameInProgress() {
-        return gameInProgress;
-    }
-
-    public boolean isPaused() {
-        return paused;
-    }
-
-    public void setPaused(boolean paused) {
-        this.paused = paused;
-    }
-
-    public void togglePause() {
-        this.paused = !this.paused;
-    }
+    public boolean isGameInProgress() { return gameInProgress; }
+    public boolean isPaused() { return paused; }
+    public void setPaused(boolean paused) { this.paused = paused; }
+    public void togglePause() { this.paused = !this.paused; }
 
     public void handleKeyPressed(int code) {
-        if (code == KeyEvent.VK_W) {
-            wPressed = true;
-        } else if (code == KeyEvent.VK_S) {
-            sPressed = true;
-        } else if (code == KeyEvent.VK_UP) {
-            upPressed = true;
-        } else if (code == KeyEvent.VK_DOWN) {
-            downPressed = true;
-        }
+        if (code == KeyEvent.VK_W) wPressed = true;
+        else if (code == KeyEvent.VK_S) sPressed = true;
+        else if (code == KeyEvent.VK_UP) upPressed = true;
+        else if (code == KeyEvent.VK_DOWN) downPressed = true;
     }
 
     public void handleKeyReleased(int code) {
-        if (code == KeyEvent.VK_W) {
-            wPressed = false;
-        } else if (code == KeyEvent.VK_S) {
-            sPressed = false;
-        } else if (code == KeyEvent.VK_UP) {
-            upPressed = false;
-        } else if (code == KeyEvent.VK_DOWN) {
-            downPressed = false;
-        }
+        if (code == KeyEvent.VK_W) wPressed = false;
+        else if (code == KeyEvent.VK_S) sPressed = false;
+        else if (code == KeyEvent.VK_UP) upPressed = false;
+        else if (code == KeyEvent.VK_DOWN) downPressed = false;
     }
 
     public void update() {
         if (!gameInProgress || paused) return;
-
         updatePaddles();
 
         if (roundStarting) {
-            if (roundFramesRemaining > 0) {
-                roundFramesRemaining--;
-            }
-            if (roundFramesRemaining <= 0) {
-                launchPuck();
-            }
+            if (roundFramesRemaining > 0) roundFramesRemaining--;
+            if (roundFramesRemaining <= 0) launchPuck();
         } else {
             updatePuck();
         }
@@ -233,24 +164,18 @@ public class GameWorld {
     }
 
     public boolean consumeMatchFinished() {
-        if (matchFinished) {
-            matchFinished = false;
-            return true;
-        }
+        if (matchFinished) { matchFinished = false; return true; }
         return false;
     }
 
     // ==================== Internal logic ====================
 
     private void updatePaddles() {
-        // Left paddle = human (W/S)
         if (wPressed) leftPaddleY += paddleSpeed;
         if (sPressed) leftPaddleY -= paddleSpeed;
 
-        // Right paddle = either human or AI
-        if (vsAi) {
-            updateAiPaddle();
-        } else {
+        if (vsAi) updateAiPaddle();
+        else {
             if (upPressed) rightPaddleY += paddleSpeed;
             if (downPressed) rightPaddleY -= paddleSpeed;
         }
@@ -260,48 +185,23 @@ public class GameWorld {
     }
 
     private void updateAiPaddle() {
-        // Simple AI: try to follow puckY with speed based on difficulty + level
         double targetY = puckY;
         double dy = targetY - rightPaddleY;
 
         double baseSpeed;
         switch (aiDifficulty) {
-            case EASY:
-                baseSpeed = 4.0;
-                break;
-            case MEDIUM:
-                baseSpeed = 7.0;
-                break;
-            case HARD:
-                baseSpeed = 10.0;
-                break;
-            default:
-                baseSpeed = 7.0;
+            case EASY: baseSpeed = 6; break;
+            case MEDIUM: baseSpeed = 9; break;
+            case HARD: baseSpeed = 12; break;
+            default: baseSpeed = 9;
         }
 
-        // slightly faster each level
-        double aiSpeed = baseSpeed + (level - 1) * 0.8;
+        double aiSpeed = baseSpeed + (level - 1) * 1.0;
 
         if (Math.abs(dy) > 3) {
             double step = Math.min(Math.abs(dy), aiSpeed);
             double dir = Math.signum(dy);
-
-            double noiseFactor;
-            switch (aiDifficulty) {
-                case EASY:
-                    noiseFactor = 0.6;
-                    break;
-                case MEDIUM:
-                    noiseFactor = 0.3;
-                    break;
-                case HARD:
-                    noiseFactor = 0.1;
-                    break;
-                default:
-                    noiseFactor = 0.3;
-            }
-            double noise = (Math.random() - 0.5) * noiseFactor * 6.0;
-
+            double noise = (Math.random() - 0.5) * 0.3 * 6;
             rightPaddleY += dir * step + noise;
         }
     }
@@ -310,108 +210,50 @@ public class GameWorld {
         puckX += puckVX;
         puckY += puckVY;
 
-        // top / bottom wall collisions
-        if (puckY + puckR > WORLD_TOP) {
-            puckY = WORLD_TOP - puckR;
-            puckVY = -puckVY;
-        } else if (puckY - puckR < WORLD_BOTTOM) {
-            puckY = WORLD_BOTTOM + puckR;
-            puckVY = -puckVY;
-        }
+        if (puckY + puckR > WORLD_TOP) { puckY = WORLD_TOP - puckR; puckVY = -puckVY; }
+        else if (puckY - puckR < WORLD_BOTTOM) { puckY = WORLD_BOTTOM + puckR; puckVY = -puckVY; }
 
         checkPaddleCollision();
 
-        // goals
         if (puckX - puckR < WORLD_LEFT) {
-            // AI scores on left goal
-            if (vsAi) {
-                handleAiGoal();
-            } else {
-                rightScore++;
-                boolean someoneWon = checkWinTwoPlayer();
-                if (!someoneWon) {
-                    // serve towards right player (positive X) or whoever conceded
-                    startRoundCountdown(-1);
-                }
-            }
+            if (vsAi) handleAiGoal(); else { rightScore++; if (!checkWinTwoPlayer()) startRoundCountdown(-1); }
         } else if (puckX + puckR > WORLD_RIGHT) {
-            // Left (human) scores on right goal
-            if (vsAi) {
-                handlePlayerGoal();
-            } else {
-                leftScore++;
-                boolean someoneWon = checkWinTwoPlayer();
-                if (!someoneWon) {
-                    // serve towards left player (negative X) or whoever conceded
-                    startRoundCountdown(1);
-                }
-            }
+            if (vsAi) handlePlayerGoal(); else { leftScore++; if (!checkWinTwoPlayer()) startRoundCountdown(1); }
         }
     }
 
-    // start a countdown for the next round, freezing the puck at center
     private void startRoundCountdown(int directionToRight) {
         roundStarting = true;
         nextServeDirection = directionToRight;
         roundFramesRemaining = roundFramesTotal;
-
-        // place puck at center and freeze it
-        puckX = 0;
-        puckY = 0;
-        puckVX = 0;
-        puckVY = 0;
+        puckX = puckY = 0;
+        puckVX = puckVY = 0;
     }
 
-    // actually launch the puck after countdown
     private void launchPuck() {
         double randomY = (Math.random() - 0.5) * 6;
-
-        double baseSpeed = 6.0 * puckSpeedMultiplier;
+        double baseSpeed = 8.0 * puckSpeedMultiplier; 
         puckVX = baseSpeed * nextServeDirection;
         puckVY = randomY * puckSpeedMultiplier;
-
         roundStarting = false;
     }
 
     private void handlePlayerGoal() {
         leftScore++;
         playerScore += 100 * level;
-
         SoundManager.getInstance().playHit();
-
-        if (leftScore >= winningScore) {
-            // Level up!
-            level++;
-            leftScore = 0;
-            rightScore = 0;
-
-            // Slightly faster puck as level rises
-            puckSpeedMultiplier *= 1.05;
-        }
-
-        // next serve from center towards AI (positive X)
+        if (leftScore >= winningScore) { level++; leftScore = rightScore = 0; puckSpeedMultiplier *= 1.05; }
         startRoundCountdown(-1);
     }
 
     private void handleAiGoal() {
         rightScore++;
         playerLives--;
-
         if (playerLives <= 0) {
-            // Game over for player (vs AI)
-            gameInProgress = false;
-            paused = true;
-            matchFinished = true;
-
-            // record high score for player
+            gameInProgress = false; paused = true; matchFinished = true;
             highScores.addScore(leftPlayerName, playerScore);
-
-            // play game-over sound and pause bg music for 5 seconds
             SoundManager.getInstance().playGameOverThenResume(5000);
-        } else {
-            // serve towards player again (negative X)
-            startRoundCountdown(1);
-        }
+        } else startRoundCountdown(1);
     }
 
     private void checkPaddleCollision() {
@@ -426,47 +268,27 @@ public class GameWorld {
         double rpBottom = rightPaddleY - paddleHalfH;
 
         // left paddle
-        if (puckX - puckR < lpRight && puckX + puckR > lpLeft &&
-                puckY + puckR > lpBottom && puckY - puckR < lpTop &&
-                puckVX < 0) {
-
-            puckX = lpRight + puckR;
-            puckVX = -puckVX;
-
-            double offset = puckY - leftPaddleY;
-            puckVY += offset * 0.1;
-
+        if (puckX - puckR < lpRight && puckX + puckR > lpLeft && puckY + puckR > lpBottom && puckY - puckR < lpTop && puckVX < 0) {
+            puckX = lpRight + puckR; puckVX = -puckVX; puckVY += (puckY - leftPaddleY) * 0.1;
             SoundManager.getInstance().playHit();
         }
 
         // right paddle
-        if (puckX + puckR > rpLeft && puckX - puckR < rpRight &&
-                puckY + puckR > rpBottom && puckY - puckR < rpTop &&
-                puckVX > 0) {
-
-            puckX = rpLeft - puckR;
-            puckVX = -puckVX;
-
-            double offset = puckY - rightPaddleY;
-            puckVY += offset * 0.1;
-
+        if (puckX + puckR > rpLeft && puckX - puckR < rpRight && puckY + puckR > rpBottom && puckY - puckR < rpTop && puckVX > 0) {
+            puckX = rpLeft - puckR; puckVX = -puckVX; puckVY += (puckY - rightPaddleY) * 0.1;
             SoundManager.getInstance().playHit();
         }
     }
 
     private boolean checkWinTwoPlayer() {
-        if (vsAi) return false; // single-player uses lives/levels instead
-
+        if (vsAi) return false;
         if (leftScore >= winningScore || rightScore >= winningScore) {
             String winnerName = (leftScore > rightScore) ? leftPlayerName : rightPlayerName;
             int winnerScore = Math.max(leftScore, rightScore);
-
             highScores.addScore(winnerName, winnerScore);
-
             gameInProgress = false;
             paused = true;
             matchFinished = true;
-
             SoundManager.getInstance().stopGameMusic();
             return true;
         }
@@ -476,45 +298,24 @@ public class GameWorld {
     // ==================== Drawing helpers ====================
 
     private void drawRink(GL2 gl) {
-        float t = (float) ((Math.sin(puckX * 0.01) + 1.0) * 0.5);
+        float t = (float)((Math.sin(puckX * 0.01) + 1.0) * 0.5);
         float base = 0.05f;
-
         gl.glColor3f(base, base + 0.05f * t, 0.25f + 0.1f * t);
         fillRect(gl, -380, -240, 380, 240);
-
-        gl.glColor3f(0.9f, 0.9f, 0.9f);
-        gl.glLineWidth(3);
+        gl.glColor3f(0.9f, 0.9f, 0.9f); gl.glLineWidth(3);
         gl.glBegin(GL2.GL_LINE_LOOP);
         gl.glVertex2d(WORLD_LEFT, WORLD_BOTTOM);
         gl.glVertex2d(WORLD_RIGHT, WORLD_BOTTOM);
         gl.glVertex2d(WORLD_RIGHT, WORLD_TOP);
         gl.glVertex2d(WORLD_LEFT, WORLD_TOP);
         gl.glEnd();
-
-        gl.glColor3f(0.8f, 0.2f, 0.2f);
-        gl.glBegin(GL2.GL_LINES);
-        gl.glVertex2d(0, WORLD_BOTTOM);
-        gl.glVertex2d(0, WORLD_TOP);
-        gl.glEnd();
-
-        gl.glColor3f(0.8f, 0.2f, 0.2f);
-        drawCircleOutline(gl, 0, 0, 60, 48);
     }
 
     private void drawPaddles(GL2 gl) {
         gl.glColor3f(0.1f, 0.5f, 1.0f);
-        fillRect(gl,
-                leftPaddleX - paddleHalfW,
-                leftPaddleY - paddleHalfH,
-                leftPaddleX + paddleHalfW,
-                leftPaddleY + paddleHalfH);
-
+        fillRect(gl, leftPaddleX - paddleHalfW, leftPaddleY - paddleHalfH, leftPaddleX + paddleHalfW, leftPaddleY + paddleHalfH);
         gl.glColor3f(0.1f, 1.0f, 0.4f);
-        fillRect(gl,
-                rightPaddleX - paddleHalfW,
-                rightPaddleY - paddleHalfH,
-                rightPaddleX + paddleHalfW,
-                rightPaddleY + paddleHalfH);
+        fillRect(gl, rightPaddleX - paddleHalfW, rightPaddleY - paddleHalfH, rightPaddleX + paddleHalfW, rightPaddleY + paddleHalfH);
     }
 
     private void drawPuck(GL2 gl) {
@@ -524,100 +325,29 @@ public class GameWorld {
 
     private void drawGameHUD(TextRenderer textRenderer, int windowWidth, int windowHeight) {
         if (textRenderer == null) return;
-
         textRenderer.beginRendering(windowWidth, windowHeight);
-
-        // Top HUD line
-        textRenderer.setColor(1f, 1f, 1f, 1f);
-        String topLine;
-
-        if (vsAi) {
-            topLine = leftPlayerName + " (You): " + leftScore +
-                    "   AI: " + rightScore +
-                    "   Score: " + playerScore +
-                    "   Lives: " + playerLives +
-                    "   Lv: " + level +
-                    " [" + aiDifficulty.name() + "]";
-        } else {
-            topLine = leftPlayerName + ": " + leftScore +
-                    "   " + rightPlayerName + ": " + rightScore;
-        }
-        textRenderer.draw(topLine, 20, windowHeight - 30);
-
-        // Bottom HUD line
-        String bottomLine;
-        if (vsAi) {
-            bottomLine = "Controls: W/S move   |   P: Pause   |   ESC: Menu   ·  Beat the AI to level up!";
-        } else {
-            bottomLine = "W/S: " + leftPlayerName +
-                    "  |  Up/Down: " + rightPlayerName +
-                    "  |  P: Pause  |  ESC: Menu";
-        }
-        textRenderer.draw(bottomLine, 20, 20);
-
-        // Round-start countdown in center (only while game running and not paused)
-        if (gameInProgress && !paused && roundStarting && roundFramesRemaining > 0) {
-            int third = roundFramesTotal / 3;
-            int remaining = roundFramesRemaining;
-            String label;
-            if (remaining > 2 * third) {
-                label = "3";
-            } else if (remaining > third) {
-                label = "2";
-            } else {
-                label = "1";
-            }
-
-            textRenderer.setColor(1f, 1f, 0.3f, 1f);
-            int approxWidth = 40;
-            int x = windowWidth / 2 - approxWidth / 2;
-            int y = windowHeight / 2 + 40;
-            textRenderer.draw(label, x, y);
-        }
-
-        if (paused) {
-            textRenderer.setColor(1f, 1f, 0f, 1f);
-            textRenderer.draw("PAUSED", windowWidth / 2 - 70, windowHeight / 2);
-        }
-
+        textRenderer.setColor(1f,1f,1f,1f);
+        String topLine = vsAi ? leftPlayerName+" (You): "+leftScore+"   AI: "+rightScore+"   Score: "+playerScore+"   Lives: "+playerLives+"   Lv: "+level+" ["+aiDifficulty.name()+"]" :
+                leftPlayerName+": "+leftScore+"   "+rightPlayerName+": "+rightScore;
+        textRenderer.draw(topLine, 20, windowHeight-30);
         textRenderer.endRendering();
     }
 
-    private double clamp(double v, double min, double max) {
-        return Math.max(min, Math.min(max, v));
-    }
-
+    private double clamp(double v, double min, double max) { return Math.max(min, Math.min(max, v)); }
     private void fillRect(GL2 gl, double x1, double y1, double x2, double y2) {
-        double left = Math.min(x1, x2);
-        double right = Math.max(x1, x2);
-        double bottom = Math.min(y1, y2);
-        double top = Math.max(y1, y2);
+        double left = Math.min(x1,x2), right=Math.max(x1,x2), bottom=Math.min(y1,y2), top=Math.max(y1,y2);
         gl.glBegin(GL2.GL_POLYGON);
-        gl.glVertex2d(left, bottom);
-        gl.glVertex2d(right, bottom);
-        gl.glVertex2d(right, top);
-        gl.glVertex2d(left, top);
+        gl.glVertex2d(left,bottom); gl.glVertex2d(right,bottom); gl.glVertex2d(right,top); gl.glVertex2d(left,top);
         gl.glEnd();
     }
 
     private void drawCircle(GL2 gl, double cx, double cy, double r, int segments) {
         gl.glBegin(GL2.GL_POLYGON);
-        for (int i = 0; i < segments; i++) {
-            double t = 2.0 * Math.PI * i / segments;
-            double x = cx + r * Math.cos(t);
-            double y = cy + r * Math.sin(t);
-            gl.glVertex2d(x, y);
-        }
-        gl.glEnd();
-    }
-
-    private void drawCircleOutline(GL2 gl, double cx, double cy, double r, int segments) {
-        gl.glBegin(GL2.GL_LINE_LOOP);
-        for (int i = 0; i < segments; i++) {
-            double t = 2.0 * Math.PI * i / segments;
-            double x = cx + r * Math.cos(t);
-            double y = cy + r * Math.sin(t);
-            gl.glVertex2d(x, y);
+        for(int i=0;i<segments;i++){
+            double t = 2.0*Math.PI*i/segments;
+            double x = cx + r*Math.cos(t);
+            double y = cy + r*Math.sin(t);
+            gl.glVertex2d(x,y);
         }
         gl.glEnd();
     }
