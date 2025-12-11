@@ -85,7 +85,7 @@ public class AirHockeyGame extends JFrame
         setLocationRelativeTo(null);
         setVisible(true);
 
-        animator = new FPSAnimator(canvas, 60, true);
+        animator = new FPSAnimator(canvas, 120, true);
         animator.start();
 
         mainMenu.open(false);
