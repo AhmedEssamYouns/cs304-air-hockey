@@ -5,7 +5,10 @@ import com.jogamp.opengl.util.awt.TextRenderer;
 import java.awt.geom.Rectangle2D;
 
 /**
- * Screen for choosing game mode: Local 2 Players or Vs AI.
+ * Screen for choosing game mode:
+ * - Local 2 Players
+ * - Local 4 Players (2 vs 2)
+ * - Vs AI
  */
 public class ModeSelectScreen {
 
@@ -23,10 +26,15 @@ public class ModeSelectScreen {
 
     public ModeSelectScreen() {
         items = new Item[] {
-                new Item("Local 2 Players", "local"),
-                new Item("Vs AI",           "vsai"),
-                new Item("Back",            "back")
+                new Item("Local 2 Players",          "pvp"),
+                new Item("Local 4 Players (2 vs 2)", "p4"),
+                new Item("Vs AI",                    "ai"),
+                new Item("Back",                     "back")
         };
+    }
+
+    public void reset() {
+        selected = 0;
     }
 
     public void moveUp() {
